@@ -4,10 +4,9 @@ import os
 import asyncio
 import edge_tts
 import io
-import base64
 from PIL import Image
 
-# --- 1. 頁面配置 (翩翩體與自適應) ---
+# --- 1. 頁面配置 (全黑文字與翩翩體) ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
 st.markdown("""
@@ -30,29 +29,28 @@ st.markdown("""
         width: 100%;
         height: 50px;
     }
+    audio { width: 100%; margin-top: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 強化版男聲引擎 (Base64 編碼確保進度條出現) ---
-async def generate_audio_base64(text):
+# --- 2. 男聲引擎 (修復進度條核心) ---
+async def generate_voice_bytes(text):
     communicate = edge_tts.Communicate(text, "zh-TW-YunxiNeural", rate="-5%")
-    audio_stream = io.BytesIO()
+    audio_data = b""
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
-            audio_stream.write(chunk["data"])
-    audio_stream.seek(0)
-    b64 = base64.b64encode(audio_stream.read()).decode()
-    return f'<audio controls autoplay src="data:audio/mp3;base64,{b64}" style="width: 100%;"></audio>'
+            audio_data += chunk["data"]
+    return audio_data
 
-# --- 3. 快速 API 通行證指南 (依照老師發現簡化) ---
+# --- 3. 學生 API 指南 (老師發現的簡化版) ---
 st.title("🔬 理化 AI 手搖飲實驗室")
 
 st.markdown("""
 <div class="guide-box">
     <b>各位同學好！請快速取得你的 AI 通行證：</b><br><br>
     步驟 1：點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入個人帳號。<br>
-    步驟 2：點擊 <b>Create API key</b>，勾選兩次同意後按產生。<br>
-    步驟 3：複製金鑰，回到這裡貼上。
+    步驟 2：點擊 <b>Create API key</b>，<b>勾選兩次同意</b>條款後按產生。<br>
+    步驟 3：點擊 <b>Copy</b> 複製金鑰，回到這裡貼上。
 </div>
 """, unsafe_allow_html=True)
 
@@ -67,33 +65,33 @@ if user_key:
 
 st.divider()
 
-# --- 4. 學生問答與拍照專區 ---
+# --- 4. 學生問答專區 ---
 st.subheader("💬 學生提問區：拍照或打字問問題")
 col1, col2 = st.columns([1, 1])
 with col1:
-    student_q = st.text_input("輸入你想問的理化問題：")
+    student_q = st.text_input("輸入問題：", placeholder="例如：為什麼原子量沒有單位？")
 with col2:
     uploaded_file = st.file_uploader("📷 拍照上傳題目截圖：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
-    with st.spinner("👨‍🏫 AI 老師思考中..."):
+    with st.spinner("👨‍🏫 AI 老師正在思考答案..."):
         try:
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            # 鎖定上下標 LaTeX
-            prompt = ["資深男理化老師，開場說各位同學好，化學式必須使用 LaTeX 上下標（如 $H_2O$）。解說要簡單。"]
+            # 強化 LaTeX 提示
+            prompt = ["資深男理化老師，開場說各位同學好。所有的化學式如 $H_2O$ 必須使用 LaTeX 格式。"]
             if uploaded_file: prompt.append(Image.open(uploaded_file))
             if student_q: prompt.append(f"問題：{student_q}")
             res = model.generate_content(prompt)
-            st.info(f"老師解釋：\n\n{res.text}")
+            st.info(f"👨‍🏫 老師解釋：\n\n{res.text}")
         except Exception as e:
             st.error(f"連線失敗：{e}")
 
 st.divider()
 
-# --- 5. 珍奶教學與男聲進度條 (終極修復) ---
+# --- 5. 珍奶教學與男聲進度條 (解決 400 Error) ---
 st.subheader("🥤 莫耳數攻略：珍珠奶茶計算法")
 
-if st.button("🚀 啟動互動教學內容 (含男聲與進度條)"):
+if st.button("🚀 啟動互動教學內容"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
@@ -101,27 +99,33 @@ if st.button("🚀 啟動互動教學內容 (含男聲與進度條)"):
         if os.path.exists(file_path):
             with st.spinner("🥤 AI 老師正在調製大杯珍奶中..."):
                 try:
-                    sample_file = genai.upload_file(path=file_path)
+                    # 修復 400 Error：優化上傳流程
+                    sample_file = genai.upload_file(path=file_path, display_name="FinalExamNotes")
                     model = genai.GenerativeModel('models/gemini-2.5-flash')
                     prompt_text = [
                         sample_file,
-                        "資深男理化老師。根據講義第 27 頁教學。1.開場說各位同學好，今天老師感冒沙啞。"
-                        "2.完整列出例題。3.化學符號必須使用 LaTeX 上下標（如 $CO_2$）。"
-                        "4.使用珍珠奶茶比喻解釋 $n = m / M$。5.提醒多喝溫水。"
+                        "你是有 20 年資歷的男理化老師。請根據講義第 27 頁教學。"
+                        "1. 開場說：各位同學好！歡迎來到理化教室。今天老師感冒沙啞，但為了你們最愛的珍奶，我們來聊聊莫耳數。"
+                        "2. 務必完整列出講義中的例題內容。"
+                        "3. 化學式如 $CO_2$ 與公式 $n = m / M$ 必須嚴格使用 LaTeX 格式。"
+                        "4. 使用珍珠奶茶比喻解釋 $n = m / M$。5. 提醒多喝溫水，注意身體。"
                     ]
                     response = model.generate_content(prompt_text)
                     st.markdown(response.text)
                     
-                    # 語音生成與 Base64 播放器
+                    # 生成語音位元流
                     clean_text = response.text.replace('$', '').replace('*', '').replace('#', '').replace('\n', ' ')
-                    audio_html = asyncio.run(generate_audio_base64(clean_text))
-                    st.components.v1.html(audio_html, height=60)
-                    st.caption("💡 學生可以拉動上方進度條重聽，或調整播放速度。")
-                    st.balloons()
+                    audio_bytes = asyncio.run(generate_voice_bytes(clean_text))
+                    
+                    # 顯示原生播放器 (確保有進度條)
+                    if audio_bytes:
+                        st.audio(audio_bytes, format="audio/mp3")
+                        st.caption("💡 學生可以拉動上方進度條重聽，或點擊右側調整語速。")
+                        st.balloons()
                 except Exception as e:
-                    st.error(f"語音生成失敗：{e}")
+                    st.error(f"連線出錯 (Error {e})。請確認講義檔案是否在 data 資料夾中。")
         else:
-            st.error("找不到講義檔案。")
+            st.error("找不到講義 Ph_Ch_finals.pdf。")
 
 st.divider()
 
@@ -131,7 +135,7 @@ if 'quiz_step' not in st.session_state: st.session_state.quiz_step = 0
 
 if st.session_state.quiz_step == 0:
     st.write("🥤 **第一題：珍珠杯數挑戰**")
-    st.write("一杯珍奶珍珠 50g ($M$)，現在有 400g 的珍珠 ($m$)，可以裝幾杯 ($n$)？")
+    st.write("老師出題：一杯珍奶的珍珠重 50g ($M$)，現在店長給你 400g 的珍珠 ($m$)，請問可以裝成幾杯珍奶 ($n$)？")
     ans1 = st.text_input("你的答案：", key="a1")
     if st.button("送出解答"):
         if ans1 == "8":
@@ -140,9 +144,9 @@ if st.session_state.quiz_step == 0:
 
 elif st.session_state.quiz_step == 1:
     st.write("🧪 **第二題：理化實戰**")
-    st.write("二氧化碳 ($CO_2$) 分子量 ($M$) 為 44。如果有 88g 的二氧化碳 ($m$)，是多少莫耳 ($n$)？")
+    st.write("二氧化碳 ($CO_2$) 的分子量 ($M$) 是 44。如果你現在有 88g 的二氧化碳 ($m$)，是多少莫耳 ($n$)？")
     ans2 = st.text_input("你的答案：", key="a2")
-    if st.button("確認挑戰結果"):
+    if st.button("確認結果"):
         if ans2 == "2":
             st.balloons(); st.success("🌟 優秀！ $88 / 44 = 2$ 莫耳。")
             if st.button("重新練習"): st.session_state.quiz_step = 0; st.rerun()
