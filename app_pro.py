@@ -3,7 +3,7 @@ import google.generativeai as genai
 import os
 
 # --- 1. 頁面配置 (維持老師最愛的風格) ---
-st.set_page_config(page_title="20年理化魂：AI 互動實驗室", layout="wide")
+st.set_page_config(page_title="理化魂：AI 互動實驗室", layout="wide")
 
 # 強制黑字與翩翩體
 st.markdown("""
@@ -52,7 +52,7 @@ student_q = st.text_input("有什麼不懂的概念？直接問老師：", place
 if student_q and user_key:
     with st.spinner("AI 老師正在組織易懂的答案..."):
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             prompt_q = f"你是資深理化老師。請回答學生問題：'{student_q}'。要求：1. 開場要說『各位同學好』。2. 術語後方必須括號標註中文註解。3. 舉例要生活化。"
             res = model.generate_content(prompt_q)
             st.info(f"👨‍🏫 **AI 老師回覆：**\n\n{res.text}")
@@ -63,19 +63,19 @@ st.divider()
 
 # --- 4. 莫耳數魔王挑戰 (買蘋果比喻) ---
 st.subheader("🍎 莫耳數 $n = m/M$ 攻略")
-if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals 講義)"):
+if st.button("🚀 啟動互動教學 (讀取 Ph_Ch for finals.pdf)"):
     if not user_key:
         st.warning("請先輸入金鑰。")
     else:
         # 相對路徑讀取 Ph_Ch_finals.pdf
         base_path = os.path.dirname(__file__)
-        file_path = os.path.join(base_path, "..", "data", "Ph_Ch_finals.pdf")
+        file_path = os.path.join(base_path, "..", "data", "Ph_Ch for finals.pdf")
         
         if os.path.exists(file_path):
             with st.spinner("AI 老師正在翻閱講義..."):
                 try:
                     sample_file = genai.upload_file(path=file_path)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     
                     # 針對學生的最終 Prompt
                     main_prompt = [
