@@ -2,28 +2,46 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# --- 1. 頁面風格 (翩翩體與溫暖教學風格) ---
+# --- 1. 頁面配置 (RWD 自適應優化) ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
 st.markdown("""
     <style>
+    /* 1. 基礎字體與顏色 */
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, span, label, li {
         color: #000000 !important;
         font-family: 'HanziPen SC', '翩翩體', 'KaiTi', sans-serif !important;
     }
-    .stButton>button {
-        background-color: #e3f2fd !important;
-        color: #000000 !important;
-        border: 1px solid #bbdefb !important;
-        border-radius: 8px;
-        font-weight: bold;
+
+    /* 2. 響應式容器優化：在手機上自動調整間距 */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 1rem 1rem !important;
+        }
+        .guide-container {
+            padding: 15px !important;
+        }
+        h1 { font-size: 1.8rem !important; }
+        h3 { font-size: 1.2rem !important; }
     }
+
+    /* 3. 保姆級指南框 */
     .guide-container {
         background-color: #f1f8e9;
         padding: 25px;
         border-radius: 15px;
         border: 2px dashed #8bc34a;
         margin-bottom: 20px;
+    }
+
+    /* 4. 手機版按鈕加強 */
+    .stButton>button {
+        background-color: #e3f2fd !important;
+        color: #000000 !important;
+        border: 1px solid #bbdefb !important;
+        border-radius: 8px;
+        font-weight: bold;
+        width: 100%; /* 在小螢幕上按鈕自動撐滿，好點擊 */
     }
     </style>
     
@@ -34,7 +52,7 @@ st.markdown("""
             const msg = new SpeechSynthesisUtterance();
             msg.text = text;
             msg.lang = 'zh-TW';
-            msg.rate = 0.85; 
+            msg.rate = 0.9; 
             window.speechSynthesis.speak(msg);
         }
     }
@@ -69,15 +87,13 @@ else:
 
 st.divider()
 
-# --- 3. 手搖飲情境教學 (使用 Gemini 2.5 Flash) ---
+# --- 3. 手搖飲情境教學 ---
 st.subheader("🥤 莫耳數攻略：珍珠奶茶計算法")
-if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals.pdf)"):
+if st.button("🚀 啟動互動教學"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
-        # 使用雲端相對路徑
         base_path = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        
         if os.path.exists(base_path):
             with st.spinner("AI 老師正在調製大杯珍奶中..."):
                 try:
@@ -99,17 +115,19 @@ if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals.pdf)"):
                     # 語音按鈕
                     speech_text = response.text.replace('$', '').replace('*', '').replace('#', '')
                     st.components.v1.html(f"""
-                        <button onclick="parent.speak('{speech_text}')" style="
-                            background-color: #4CAF50; color: white; padding: 12px 24px; 
-                            border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: bold;">
-                            🔊 聽 AI 老師講課 (自然語音)
-                        </button>
-                    """, height=70)
+                        <div style="text-align: center;">
+                            <button onclick="parent.speak('{speech_text}')" style="
+                                background-color: #4CAF50; color: white; padding: 15px 30px; 
+                                border: none; border-radius: 10px; cursor: pointer; font-size: 18px; font-weight: bold; width: 80%;">
+                                🔊 點我聽 AI 老師講課
+                            </button>
+                        </div>
+                    """, height=80)
                     st.balloons()
                 except Exception as e:
                     st.error(f"生成失敗：{e}")
         else:
-            st.error("找不到講義 Ph_Ch_finals.pdf，請檢查 GitHub 資料夾。")
+            st.error("找不到講義 Ph_Ch_finals.pdf。")
 
 st.divider()
 
@@ -118,26 +136,28 @@ st.subheader("📝 隨堂挑戰：你懂了嗎？")
 if 'quiz_step' not in st.session_state:
     st.session_state.quiz_step = 0
 
-if st.session_state.quiz_step == 0:
-    st.write("🥤 **第一關：珍珠杯數題**")
-    st.write("老師出題：一杯珍奶的珍珠重 50g ($M$)，你現在買了 250g 的珍珠 ($m$)，請問總共可以裝成幾杯珍奶 ($n$)？")
-    ans1 = st.text_input("你的答案：", key="a1")
-    if st.button("送出解答"):
-        if ans1 == "5":
-            st.success("太強了！ $n = 250 / 50 = 5$ 杯。概念完全正確！")
-            st.session_state.quiz_step = 1
-            st.rerun()
-        else: st.error("再算算看，用『珍珠總重量』除以『每一杯的珍珠重量』喔！")
-
-elif st.session_state.quiz_step == 1:
-    st.write("🧪 **第二關：理化魔王題**")
-    st.write("老師出題：氧氣 ($O_2$) 的分子量 ($M$) 是 32。如果你現在有 64g 的氧氣 ($m$)，請問這有多少莫耳 ($n$)？")
-    ans2 = st.text_input("你的答案：", key="a2")
-    if st.button("確認挑戰結果"):
-        if ans2 == "2":
-            st.balloons()
-            st.success("超級優秀！ $64 / 32 = 2$ 莫耳。你已經掌握莫耳數的精髓了！")
-            if st.button("重新練習"):
-                st.session_state.quiz_step = 0
+# 使用容器讓內容更整齊
+with st.container():
+    if st.session_state.quiz_step == 0:
+        st.write("🥤 **第一關：珍珠杯數題**")
+        st.write("老師出題：一杯珍奶的珍珠重 50g ($M$)，你現在買了 300g 的珍珠 ($m$)，請問總共可以裝成幾杯珍奶 ($n$)？")
+        ans1 = st.text_input("你的答案：", key="a1")
+        if st.button("送出解答"):
+            if ans1 == "6":
+                st.success("太強了！ $n = 300 / 50 = 6$ 杯。")
+                st.session_state.quiz_step = 1
                 st.rerun()
-        else: st.error("想想看，跟剛才算珍奶杯數的方法完全一樣喔！")
+            else: st.error("再算算看，用『總重量』除以『每一杯的重量』喔！")
+
+    elif st.session_state.quiz_step == 1:
+        st.write("🧪 **第二關：理化魔王題**")
+        st.write("老師出題：氧氣 ($O_2$) 的分子量 ($M$) 是 32。如果你現在有 96g 的氧氣 ($m$)，請問這有多少莫耳 ($n$)？")
+        ans2 = st.text_input("你的答案：", key="a2")
+        if st.button("確認挑戰結果"):
+            if ans2 == "3":
+                st.balloons()
+                st.success("超級優秀！ $96 / 32 = 3$ 莫耳。你已經完全掌握了！")
+                if st.button("重新挑戰"):
+                    st.session_state.quiz_step = 0
+                    st.rerun()
+            else: st.error("想想看，跟算珍奶杯數的方法完全一樣喔！")
