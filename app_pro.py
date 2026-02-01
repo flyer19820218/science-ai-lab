@@ -3,7 +3,7 @@ import google.generativeai as genai
 import os
 import asyncio
 import edge_tts
-import fitz  # 雲端自動截圖
+import fitz  # 雲端自動加載
 import re
 import base64
 from PIL import Image
@@ -30,19 +30,11 @@ st.markdown("""
         font-weight: bold;
         width: 100%;
         height: 50px;
-        font-size: 1.2rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 效能優化：Cache PDF 讀取 ---
-@st.cache_resource
-def open_pdf_doc(path):
-    if os.path.exists(path):
-        return fitz.open(path)
-    return None
-
-# --- 3. 核心助教語音 (iPad 專用 Base64 終極方案) ---
+# --- 2. 核心助教語音 (iPad 專用 Base64 方案) ---
 async def generate_voice_base64(text):
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
@@ -55,7 +47,7 @@ async def generate_voice_base64(text):
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
-# --- 4. 72 頁熱血中二標題 (一頁不少，絕對不偷懶) ---
+# --- 3. 72 頁熱血中二標題 (一頁不少，絕不偷懶) ---
 page_titles = {
     1: "【禁忌的儀式：科學方法與變因】", 2: "【因果變律：實驗安全規範】", 3: "【平衡律：測量與天平操作】", 4: "【煉金基礎：物質密度奧義】",
     5: "【煉金呼吸：大氣製備禁咒】", 6: "【本質界線：純粹靈魂與混沌】", 7: "【提純程序：過濾與蒸發陣法】", 8: "【溶解契約：飽和溶液的極限】",
@@ -77,58 +69,27 @@ page_titles = {
     69: "【磁魂覺醒：安培右手定則】", 70: "【勞倫茲之怒：右手開掌定則】", 71: "【旋轉輪迴：直流電動機契約】", 72: "【發電機覺醒：法拉第冷次定律】"
 }
 
-# --- 5. 初始化 Session ---
+# --- 4. 初始化 Session ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 通行證申請教學 (回歸並加強) ---
+# --- 5. 通行證申請教學 ---
 st.title("🥤 理化 AI 雞排珍奶實驗室 (助教版)")
 st.markdown("""
 <div class="guide-box">
     <b>📖 API 通行證申請教學（學生必看）：</b><br>
     1. 點擊連結：<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
-    2. 點擊左側 <b>Get API key</b>，再點擊 <b>Create API key</b>。<br>
-    3. <b>⚠️ 重要：跳出視窗時，請務必「勾選兩次」同意條款</b>，然後按產生。<br>
-    4. 複製那一串英文金鑰，貼回下方欄位即可啟動助教。
+    2. 點擊 <b>Create API key</b>，<b>務必勾選兩次同意條款</b>後產生金鑰。<br>
+    3. 複製金鑰，貼回下方欄位即可啟動。
 </div>
 """, unsafe_allow_html=True)
 
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
 st.divider()
 
-# --- 7. 學生提問專區 (確保功能不消失) ---
+# --- 6. 學生提問專區 ---
 st.subheader("💬 提問專區：拍照或打字問問題")
 col_q, col_up = st.columns([1, 1])
-with col_q: student_q = st.text_input("打字問助教：", placeholder="例如：什麼是分子量？")
+with col_q: student_q = st.text_input("打字問助教：", placeholder="例如：為什麼水可以滅火？")
 with col_up: uploaded_file = st.file_uploader("拍題目截圖：", type=["jpg", "png", "jpeg"])
 
-if (student_q or uploaded_file) and user_key:
-    with st.spinner("正在調製波霸奶茶並思考答案..."):
-        try:
-            genai.configure(api_key=user_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
-            parts = ["你是資深理化 AI 助教。用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
-            if uploaded_file: parts.append(Image.open(uploaded_file))
-            if student_q: parts.append(student_q)
-            res = model.generate_content(parts)
-            st.info(f"💡 助教解答：\n\n{res.text}")
-        except Exception as e: st.error(f"思考失敗：{e}")
-
-st.divider()
-
-# --- 8. 五大門派雙選單 (72 頁熱血標題全開) ---
-st.subheader("📖 選擇學習單元")
-parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
-part_choice = st.selectbox("第一步：選擇大章節", parts_list)
-
-if "第一門" in part_choice: r = range(1, 16)
-elif "二" in part_choice: r = range(16, 27)
-elif "三" in part_choice: r = range(27, 41)
-elif "四" in part_choice: r = range(41, 55)
-else: r = range(55, 73)
-
-options = [f"第 {p} 頁：{page_titles.get(p, '單元內容')}" for p in r]
-selected_page_str = st.selectbox("第二步：精確單元名稱 (不跳頁)", options)
-target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
-
-# --- 9. 核心導讀按鈕 ---
-if st.button(f"🚀 啟動【第 {
+if (student_q or uploaded_file
