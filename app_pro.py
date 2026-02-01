@@ -58,11 +58,11 @@ if st.button("🚀 讀取講義並生成教學導讀"):
         # 抓取目前程式碼所在的路徑，再往上找 data 資料夾
         current_dir = os.path.dirname(os.path.abspath(__file__))
         # 雲端路徑修正：通常 data 會在 src 的上一層或同一層
-        file_path = os.path.join(current_dir, "..", "data", "ph_ch_finals.pdf")
+        file_path = os.path.join(current_dir, "..", "data", "Ph_Ch_finals.pdf")
         
         # 如果找不到，再試試看同級路徑 (適應不同的部署結構)
         if not os.path.exists(file_path):
-            file_path = os.path.join(current_dir, "data", "ph_ch_finals.pdf")
+            file_path = os.path.join(current_dir, "data", "Ph_Ch_finals.pdf")
 
         if os.path.exists(file_path):
             with st.spinner("正在為您研讀講義..."):
