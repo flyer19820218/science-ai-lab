@@ -7,7 +7,7 @@ import io
 import re
 from PIL import Image
 
-# --- 1. 頁面配置 (全黑文字、翩翩體) ---
+# --- 1. 頁面配置 (翩翩體、全黑文字) ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
 st.markdown("""
@@ -34,12 +34,13 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心女聲引擎 (HsiaoChen) ---
+# --- 2. 穩定版助教語音 (HsiaoChen) ---
 async def generate_voice(text):
-    # 移除 LaTeX 符號與轉義字符，確保語音平順
+    # 移除 LaTeX 符號與特殊字符，確保語音平順
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     clean_text = clean_text.replace('*', '').replace('#', '').replace('\n', ' ')
+    
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -47,124 +48,104 @@ async def generate_voice(text):
             audio_data += chunk["data"]
     return audio_data
 
-# --- 3. 學生 API 指南 ---
+# --- 3. 初始化 Session (確保練習題不會因為網頁刷新消失) ---
+if 'active_quiz' not in st.session_state:
+    st.session_state.active_quiz = None
+
+# --- 4. 學生 API 指南 (打勾兩次版) ---
 st.title("🔬 理化 AI 手搖飲實驗室")
 
 st.markdown("""
 <div class="guide-box">
-    <b>各位同學好！請快速取得你的 AI 通行證：</b><br><br>
+    <b>各位同學好！請照著以下步驟取得你的 AI 通行證：</b><br><br>
     1. 點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
-    2. 點擊 <b>Create API key</b>，勾選兩次同意後按產生。<br>
+    2. 點擊 <b>Create API key</b>，<b>勾選兩次同意條款</b>後按產生。<br>
     3. 複製金鑰，回到這裡貼上按 Enter。
 </div>
 """, unsafe_allow_html=True)
 
-user_key = st.text_input("在這裡貼上你的通行證：", type="password")
+user_key = st.text_input("🔑 在這裡貼上你的通行證：", type="password")
 
 if user_key:
     try:
         genai.configure(api_key=user_key)
-        st.success("✅ 通行證驗證成功！")
+        st.success("✅ 通行證驗證成功！正在連接 HsiaoChen 老師...")
     except:
-        st.error("❌ 金鑰格式錯誤。")
+        st.error("❌ 金鑰錯誤，請重新複製。")
 
 st.divider()
 
-# --- 4. 初始化 Session State ---
-if 'current_quiz' not in st.session_state:
-    st.session_state.current_quiz = None
-
-# --- 5. 學生問答專區 ---
-st.subheader("💬 學生提問區：拍照或打字問問題")
-col_q, col_up = st.columns([1, 1])
-with col_q:
-    student_q = st.text_input("輸入問題：", placeholder="例如：什麼是原子量？")
-with col_up:
-    uploaded_image = st.file_uploader("📷 拍照上傳題目：", type=["jpg", "png", "jpeg"])
-
-if (student_q or uploaded_image) and user_key:
-    with st.spinner("👩‍🏫 AI 老師正在思考答案..."):
-        try:
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
-            prompt = ["你是資深理化老師。化學式如 $CO_2$ 與公式必須嚴格使用 LaTeX 格式。"]
-            parts = prompt + ([Image.open(uploaded_image)] if uploaded_image else []) + ([f"問題：{student_q}"] if student_q else [])
-            res = model.generate_content(parts)
-            st.info(f"👩‍🏫 老師解釋：\n\n{res.text}")
-        except Exception as e:
-            st.error(f"連線失敗：{e}")
-
-st.divider()
-
-# --- 6. 講義頁碼導讀與引導式練習 ---
+# --- 5. 講義頁碼導讀區 ---
 st.subheader("🥤 自主學習區：翻開講義指定頁面")
 
-target_page = st.number_input("請輸入講義頁碼 (1-71)：", min_value=1, max_value=71, value=27)
+target_page = st.number_input("📖 請輸入講義頁碼 (1-71)：", min_value=1, max_value=71, value=1)
 
-if st.button(f"🚀 啟動第 {target_page} 頁教學"):
+if st.button(f"🚀 啟動第 {target_page} 頁精確教學"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
         file_path = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
         if os.path.exists(file_path):
-            with st.spinner(f"正在準備第 {target_page} 頁教學中..."):
+            with st.spinner(f"正在嚴格讀取第 {target_page} 頁並調製大杯珍奶..."):
                 try:
                     sample_file = genai.upload_file(path=file_path)
                     model = genai.GenerativeModel('models/gemini-2.5-flash')
                     
-                    # 強化邏輯：要求 AI 先自檢答案
+                    # 提示詞下死命令：絕對服從 PDF
                     prompt_text = [
                         sample_file,
-                        f"你是有 20 年資歷的理化老師。請針對講義第 {target_page} 頁教學。"
-                        "1. 開場說：各位同學好！今天老師感冒沙啞，我們來看看這一頁。2. 完整列出該頁例題。 "
-                        "3. 使用珍珠奶茶情境解釋原理。公式如 $$n = \\frac{m}{M}$$ 必須使用 LaTeX 格式。"
-                        "4. 百分比符號必須轉義為 \\%（例如 V\\%）。"
-                        "5. 重點：課程結束後，請精準使用標籤 '[QUIZ_DATA]' 包裹：題目、選項、正確字母、一個引導提示。"
-                        "請務必再次檢查『正確字母』是否與題目邏輯相符，不要給錯答案。"
+                        f"你是有 20 年資歷的理化老師。請嚴格根據講義第 {target_page} 頁內容進行教學。"
+                        "1. 教學內容必須完全對齊講義數據與題目，不得自行編造。"
+                        "2. 使用手搖飲珍珠情境解釋原理。化學式如 $CO_2$ 與公式如 $n = m / M$ 必須使用 LaTeX 格式。"
+                        "3. 關於百分比濃度，請寫成 $$V\\% = \\left( \\frac{\\text{溶質體積}}{\\text{溶液體積}} \\right) \\times 100\\%$$。注意百分比符號要加轉義 \\%。"
+                        "4. 結尾請用標籤 '[QUIZ_DATA]' 包裹以下內容：題目、選項A、選項B、選項C、選項D、正確字母、給學生的引導提示。"
+                        "5. 最後提醒多喝溫水。"
                     ]
                     
                     response = model.generate_content(prompt_text)
                     full_text = response.text
                     
-                    content_parts = full_text.split("[QUIZ_DATA]")
-                    teaching_txt = content_parts[0]
+                    # 拆分內容與練習題數據
+                    parts = full_text.split("[QUIZ_DATA]")
+                    teaching_txt = parts[0]
                     st.markdown(teaching_txt)
                     
+                    # 語音播放
                     audio_bytes = asyncio.run(generate_voice(teaching_txt))
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/mp3")
                     
-                    if len(content_parts) > 1:
-                        st.session_state.current_quiz = content_parts[1]
+                    # 儲存題目數據
+                    if len(parts) > 1:
+                        st.session_state.active_quiz = parts[1]
                     
                     st.balloons()
                 except Exception as e:
-                    st.error(f"連線出錯：{e}")
+                    st.error(f"連線失敗：{e}")
         else:
             st.error("找不到講義檔案。")
 
-# --- 7. 顯示引導式練習界面 ---
-if st.session_state.current_quiz:
+# --- 6. 引導式問答界面 ---
+if st.session_state.active_quiz:
     st.divider()
-    st.subheader("📝 隨堂挑戰")
+    st.subheader("📝 隨堂挑戰：引導式腦力激盪")
     
-    quiz_raw = st.session_state.current_quiz
-    st.info("請根據剛才的教學內容，選出正確答案：")
+    quiz_raw = st.session_state.active_quiz
+    # 提取題目與選項 (排除正確答案字母以免劇透)
+    quiz_display = quiz_raw.split("正確")[0]
+    st.markdown(quiz_display)
     
-    # 清理題目顯示
-    q_display = quiz_raw.split("正確")[0]
-    st.markdown(q_display)
-    
-    student_ans = st.radio("你的選擇：", ["A", "B", "C", "D"], key="quiz_radio")
+    student_choice = st.radio("你的解答是：", ["A", "B", "C", "D"], key="active_user_q")
     
     if st.button("送出解答"):
-        # 尋找正確答案字母
-        match = re.search(r"[正確選項|正確字母][：:\s]*([A-D])", quiz_raw)
+        # 從 raw 數據中抓取正確答案與引導提示
+        correct_match = re.search(r"正確[選項|字母][：:\s]*([A-D])", quiz_raw)
         hint_match = re.search(r"引導提示[：:\s]*(.*)", quiz_raw)
         
-        correct_letter = match.group(1).strip() if match else "A"
-        hint_text = hint_match.group(1).strip() if hint_match else "再想一下頁面中的關鍵公式喔！"
+        correct_ans = correct_match.group(1).strip() if correct_match else "A"
+        hint_txt = hint_match.group(1).strip() if hint_match else "再想一下這頁的關鍵原理喔！"
         
-        if student_ans == correct_letter:
-            st.success(f"🎯 太棒了！答案正是 {student_ans}。你掌握了這一頁的精髓！")
+        if student_choice == correct_ans:
+            st.success(f"🎯 答對了！就是 {student_choice}。你的邏輯非常正確！")
         else:
-            st.error(f"❌ 不對喔！ HsiaoChen 老師的小提醒：{hint_text}")
+            st.error(f"❌ 哎呀，再想想看！ HsiaoChen 老師的小提示：{hint_txt}")
