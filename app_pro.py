@@ -63,13 +63,13 @@ st.divider()
 
 # --- 4. 莫耳數魔王挑戰 (買蘋果比喻) ---
 st.subheader("🍎 莫耳數 $n = m/M$ 攻略")
-if st.button("🚀 啟動互動教學 (讀取 Ph_Ch for finals.pdf)"):
+if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals.pdf)"):
     if not user_key:
         st.warning("請先輸入金鑰。")
     else:
         # 相對路徑讀取 Ph_Ch_finals.pdf
         base_path = os.path.dirname(__file__)
-        file_path = os.path.join(base_path, "..", "data", "Ph_Ch for finals.pdf")
+        file_path = os.path.join(base_path, "..", "data", "Ph_Ch_finals.pdf")
         
         if os.path.exists(file_path):
             with st.spinner("AI 老師正在翻閱講義..."):
