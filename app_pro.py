@@ -4,9 +4,10 @@ import os
 import asyncio
 import edge_tts
 import io
+import re
 from PIL import Image
 
-# --- 1. 頁面配置 (翩翩體與全黑文字) ---
+# --- 1. 頁面配置 ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
 st.markdown("""
@@ -32,7 +33,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心男聲引擎 (YunxiNeural) ---
+# --- 2. 語音生成引擎 ---
 async def generate_voice(text):
     communicate = edge_tts.Communicate(text, "zh-TW-YunxiNeural", rate="-5%")
     audio_data = b""
@@ -41,15 +42,15 @@ async def generate_voice(text):
             audio_data += chunk["data"]
     return audio_data
 
-# --- 3. 學生 API 通行證：快速申請版 ---
+# --- 3. 快速 API 指南 ---
 st.title("🔬 理化 AI 手搖飲實驗室")
 
 st.markdown("""
 <div class="guide-box">
     <b>各位同學好！請快速取得你的 AI 通行證：</b><br><br>
-    步驟 1：點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
-    步驟 2：點擊 <b>Create API key</b>，勾選兩次同意後按產生。<br>
-    步驟 3：複製金鑰，回到這裡貼上。
+    1. 點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
+    2. 點擊 <b>Create API key</b>，勾選兩次同意後按產生。<br>
+    3. 複製金鑰，回到這裡貼上。
 </div>
 """, unsafe_allow_html=True)
 
@@ -60,83 +61,90 @@ if user_key:
         genai.configure(api_key=user_key)
         st.success("✅ 通行證驗證成功！")
     except:
-        st.error("❌ 金鑰格式錯誤，請檢查。")
+        st.error("金鑰有誤，請檢查。")
 
 st.divider()
 
 # --- 4. 學生問答區 ---
 st.subheader("💬 學生提問區：拍照或打字問問題")
-col1, col2 = st.columns([1, 1])
-with col1:
-    student_q = st.text_input("輸入你想問的理化問題：")
-with col2:
+col_q, col_i = st.columns([1, 1])
+with col_q:
+    student_q = st.text_input("輸入理化問題：")
+with col_i:
     uploaded_file = st.file_uploader("📷 拍照上傳題目截圖：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
     with st.spinner("👨‍🏫 AI 老師思考中..."):
         try:
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            prompt = ["資深男理化老師。化學式如 $$H_2O$$ 必須使用 LaTeX 格式。解說要簡單。"]
+            prompt = ["資深男理化老師。化學式如 $$H_2O$$ 必須使用 LaTeX 格式。"]
             if uploaded_file: prompt.append(Image.open(uploaded_file))
-            if student_q: prompt.append(f"問題內容：{student_q}")
+            if student_q: prompt.append(f"問題：{student_q}")
             res = model.generate_content(prompt)
-            st.info(f"👨‍🏫 老師解釋：\n\n{res.text}")
+            st.info(f"老師解釋：\n\n{res.text}")
         except Exception as e:
             st.error(f"連線失敗：{e}")
 
 st.divider()
 
-# --- 5. 動態分頁教學區 ---
-st.subheader("🥤 自主學習區：翻開講義學單元")
+# --- 5. 單元選擇與動態教學 ---
+st.subheader("🥤 自主學習區：選擇你想上的課")
 
-# 讓學生輸入頁碼
-target_page = st.number_input("📖 請輸入你想學習的講義頁碼 (例如: 27)：", min_value=1, max_value=100, value=27)
+# 單元與頁碼映射表
+unit_map = {
+    "1-1 原子量與分子量 (p.25)": 25,
+    "1-2 莫耳數觀念 (p.27)": 27,
+    "1-3 化學計量 (p.30)": 30,
+    "2-1 質量守恆定律 (p.35)": 35,
+    "2-2 化學反應式 (p.38)": 38
+}
 
-if st.button("🚀 啟動該頁面互動教學"):
+selected_unit = st.selectbox("📖 請選擇學習單元：", list(unit_map.keys()))
+target_page = unit_map[selected_unit]
+
+if st.button(f"🚀 啟動【{selected_unit}】互動教學"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
         file_path = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
         if os.path.exists(file_path):
-            with st.spinner(f"🥤 AI 老師正在翻閱第 {target_page} 頁講義並準備珍奶中..."):
+            with st.spinner("🥤 AI 老師正在準備講義與珍奶中..."):
                 try:
                     sample_file = genai.upload_file(path=file_path)
                     model = genai.GenerativeModel('models/gemini-2.5-flash')
                     
-                    # 動態提示詞：根據輸入頁碼調整
+                    # 提示詞：要求同時產生課程內容與一道隨機練習題
                     prompt_text = [
                         sample_file,
-                        f"你是有 20 年資歷的男理化老師。請針對講義第 {target_page} 頁的內容進行教學。"
-                        "1. 開場說：各位同學好！今天老師感冒沙啞，我們來看看這一頁的重點。"
-                        "2. 請完整整理出這一頁的關鍵概念與例題內容。"
-                        "3. 盡可能使用『珍珠奶茶』的情境或比喻來解釋科學原理（例如莫耳數公式 $n = m / M$）。"
-                        "4. 所有的化學式與公式必須嚴格使用 LaTeX 格式（如 $$CO_2$$, $$n = \\frac{m}{M}$$）。"
-                        "5. 最後溫馨提醒學生多喝溫水，注意健康。"
+                        f"你是有 20 年資歷的男理化老師。請針對講義第 {target_page} 頁教學。"
+                        "1. 開場說：各位同學好！歡迎來到理化教室。今天老師感冒沙啞，但我們還是要來聊聊這一頁。"
+                        "2. 使用手搖飲珍珠情境解釋這一頁的科學原理。3. 所有的化學式與公式必須嚴格使用 LaTeX 格式。"
+                        "4. 在教學結束後，請加上分隔線 '---QUIZ---'，並針對本頁出一道『隨堂挑戰題』(含選項) 與正確答案。"
+                        "5. 最後提醒多喝溫水。"
                     ]
                     
                     response = model.generate_content(prompt_text)
-                    st.markdown(response.text)
+                    full_text = response.text
                     
-                    # 生成音訊
-                    clean_text = response.text.replace('$', '').replace('*', '').replace('#', '').replace('\n', ' ')
+                    # 拆分教學內容與練習題
+                    parts = full_text.split("---QUIZ---")
+                    teaching_content = parts[0]
+                    quiz_content = parts[1] if len(parts) > 1 else "（今日無隨堂練習）"
+                    
+                    # 顯示內容
+                    st.markdown(teaching_content)
+                    
+                    # 生成並播放語音 (只唸教學內容)
+                    clean_text = teaching_content.replace('$', '').replace('*', '').replace('#', '').replace('\n', ' ')
                     audio_bytes = asyncio.run(generate_voice(clean_text))
+                    st.audio(audio_bytes, format="audio/mp3")
                     
-                    if audio_bytes:
-                        st.audio(audio_bytes, format="audio/mp3")
-                        st.balloons()
+                    # 顯示隨機練習題
+                    st.success("📝 **隨堂挑戰題**")
+                    st.markdown(quiz_content)
+                    st.balloons()
+                    
                 except Exception as e:
                     st.error(f"連線出錯：{e}")
         else:
-            st.error("找不到講義 Ph_Ch_finals.pdf，請確認 data 資料夾。")
-
-st.divider()
-
-# --- 6. 隨堂挑戰 (作為基礎示範) ---
-st.subheader("📝 莫耳數魔王挑戰 (基礎觀測)")
-st.write("二氧化碳 ($$CO_2$$) 分子量 ($$M$$) 是 44。如果有 88g 的二氧化碳 ($$m$$)，是多少莫耳 ($$n$$)？")
-ans = st.text_input("你的答案：", key="q1")
-if st.button("送出挑戰答案"):
-    if ans == "2":
-        st.success("🎯 優秀！ $$n = \\frac{88}{44} = 2$$ 莫耳。")
-    else:
-        st.error("再想一下喔，總重除以分子量！")
+            st.error("找不到講義檔案。")
