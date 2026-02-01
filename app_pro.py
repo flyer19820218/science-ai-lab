@@ -3,11 +3,12 @@ import google.generativeai as genai
 import os
 import asyncio
 import edge_tts
-import fitz  # 雲端自動加載
+import fitz  # 雲端自動加載，免本機安裝
 import re
+import base64
 from PIL import Image
 
-# --- 1. 頁面配置 (全黑文字、翩翩體、平板優化) ---
+# --- 1. 頁面配置 (全黑翩翩體、適應平板) ---
 st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
@@ -34,9 +35,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心助教語音 (解決平板靜音的穩定協定) ---
-async def generate_voice(text):
-    # 移除 LaTeX 符號與特殊字元，確保 HsiaoChen 老師唸得通順
+# --- 2. 核心助教語音 (iPad 專用強效 Base64 方案) ---
+async def generate_voice_base64(text):
+    # 移除 LaTeX 與特殊字符，將 % 唸成「百分之」
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     clean_text = clean_text.replace('*', '').replace('#', '').replace('\n', ' ')
@@ -45,18 +46,20 @@ async def generate_voice(text):
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             audio_data += chunk["data"]
-    return audio_data
+    # 轉為 Base64 字串，徹底解決 iPad 報錯問題
+    b64 = base64.b64encode(audio_data).decode()
+    return f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
-# --- 3. 雲端截圖功能 (PDF 轉圖片) ---
+# --- 3. 雲端截圖功能 ---
 def get_pdf_page_image(pdf_path, page_index):
     doc = fitz.open(pdf_path)
     page = doc.load_page(page_index)
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) 
+    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) # 高清渲染
     img_data = pix.tobytes("png")
     doc.close()
     return img_data
 
-# --- 4. 72 頁熱血中二標題對照表 (一頁不少，不跳頁) ---
+# --- 4. 72 頁熱血中二標題 (不偷懶全開版) ---
 page_titles = {
     1: "【禁忌的儀式：科學方法與變因】", 2: "【因果變律：實驗安全規範】", 3: "【平衡律：測量與天平操作】", 4: "【煉金基礎：物質密度奧義】",
     5: "【煉金呼吸：大氣製備禁咒】", 6: "【本質界線：純粹靈魂與混沌】", 7: "【提純程序：過濾與蒸發陣法】", 8: "【溶解契約：飽和溶液的極限】",
@@ -75,83 +78,93 @@ page_titles = {
     57: "【永恆總量：力學能守恆定律】", 58: "【力矩平衡：槓桿原理的支點】", 59: "【機械魔法：滑輪與定滑輪】", 60: "【省力契約：斜面、螺旋與輪軸】",
     61: "【庫倫禁令：靜電感應與引力】", 62: "【電勢之戰：電流、電壓與伏特】", 63: "【電阻枷鎖：歐姆定律的秩序】", 64: "【瓦特之翼：電功與瞬時能量】",
     65: "【焦耳毀滅：家用電路與安全】", 66: "【無形指向：磁場線與磁極】", 67: "【靈魂契約：鋅銅電池奧義】", 68: "【強制異變：電鍍祕術之理】",
-    69: "【磁魂覺醒：安培右手定則】", 70: "【勞倫茲之怒：右手開掌定則】", 71: "【旋轉輪迴：直流電動機契約】", 72: "【發電機覺醒：冷次定律與感應】"
+    69: "【磁魂覺醒：安培右手定則】", 70: "【勞倫茲之怒：右手開掌定則】", 71: "【旋轉輪迴：直流電動機契約】", 72: "【發電機覺醒：法拉第感應與冷次】"
 }
 
 # --- 5. 初始化 Session ---
-if 'audio_data' not in st.session_state: st.session_state.audio_data = None
+if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 通行證申請教學 ---
+# --- 6. 通行證指南 ---
 st.title("🥤 理化 AI 雞排珍奶實驗室 (助教版)")
 st.markdown("""
 <div class="guide-box">
     <b>📖 學生快速通行指南：</b><br>
     1. 點擊連結：<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
     2. 點擊 <b>Create API key</b>，<b>務必勾選兩次同意條款</b>後按產生。<br>
-    3. 複製金鑰，貼回下方「通行證」欄位按 Enter 即可解鎖。
+    3. 複製金鑰，貼回下方「通行證」欄位即可啟動。
 </div>
 """, unsafe_allow_html=True)
 
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
 st.divider()
 
-# --- 7. 五大門派雙選單 (1-72 頁不跳頁、中二標題全開) ---
-st.subheader("📖 翻開真理之書：選擇學習單元")
-parts_list = [
-    "【第一門：物質初探】 (p.1-15)", "【第二門：能量流轉】 (p.16-26)",
-    "【第三門：微觀審判】 (p.27-40)", "【第四門：力學秘術】 (p.41-54)",
-    "【第五門：旋轉輪迴】 (p.55-72)"
-]
+# --- 7. 學生提問區 ---
+st.subheader("💬 學生提問專區：拍照或打字問問題")
+col_q, col_up = st.columns([1, 1])
+with col_q: student_q = st.text_input("輸入問題：", placeholder="例如：什麼是比熱？")
+with col_up: uploaded_file = st.file_uploader("拍照上傳：", type=["jpg", "png", "jpeg"])
+
+if (student_q or uploaded_file) and user_key:
+    with st.spinner("正在調製波霸奶茶並思考答案..."):
+        try:
+            genai.configure(api_key=user_key)
+            model = genai.GenerativeModel('models/gemini-2.5-flash')
+            prompt_parts = ["你是資深理化 AI 助教。請用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
+            if uploaded_file: prompt_parts.append(Image.open(uploaded_file))
+            if student_q: prompt_parts.append(f"學生問題：{student_q}")
+            res = model.generate_content(prompt_parts)
+            st.info(f"💡 助教解答：\n\n{res.text}")
+        except Exception as e: st.error(f"思考失敗：{e}")
+
+st.divider()
+
+# --- 8. 五大門派雙選單 (72 頁全開) ---
+st.subheader("📖 真理之書：選擇學習單元")
+parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("第一步：選擇大章節", parts_list)
 
-# 頁碼範圍映射
 if "第一門" in part_choice: r = range(1, 16)
-elif "第二門" in part_choice: r = range(16, 27)
+elif "二" in part_choice: r = range(16, 27)
 elif "三" in part_choice: r = range(27, 41)
 elif "四" in part_choice: r = range(41, 55)
 else: r = range(55, 73)
 
-options = [f"第 {p} 頁：{page_titles.get(p, '單元詳解')}" for p in r]
-selected_page_str = st.selectbox("第二步：選擇精確單元名稱", options)
+options = [f"第 {p} 頁：{page_titles.get(p, '單元重點')}" for p in r]
+selected_page_str = st.selectbox("第二步：選擇精確單元名稱 (不跳頁)", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-if st.button(f"🚀 啟動【第 {target_page} 頁】導讀內容"):
+if st.button(f"🚀 啟動【第 {target_page} 頁】圖文導讀"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
         genai.configure(api_key=user_key)
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        
         with st.spinner("正在調製波霸奶茶..."):
             try:
-                # 1. 雲端截圖顯示
+                # 1. 雲端截圖
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
                 st.image(page_img, caption=f"講義第 {target_page} 頁：{page_titles[target_page]}", use_column_width=True)
                 
-                # 2. AI 教學邏輯 (移除練習題，強化精確度)
+                # 2. AI 講解 (講義優先)
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
-                
                 prompt = [
                     file_obj,
                     f"你是資深理化 AI 助教。1. 請針對講義第 {target_page} 頁內容進行精確導讀。"
-                    f"2. **【唯一重點】**：只講解第 {target_page} 頁看到的圖表與文字，不准提到其他頁面。"
+                    f"2. **【核心任務】**：優先詳細講解該頁面上的所有『例題』與計算步驟。"
                     "3. 開場白請生活化，提到『雞排配大杯珍奶』。說各位同學好！今天助教感冒沙啞。"
-                    "4. 公式如 $n=m/M$ 與化學式必須嚴格使用 LaTeX 格式。"
-                    "5. 使用珍珠奶茶的珍珠量來比喻莫耳數。6. 絕對不准出現練習題或測驗。"
+                    "4. 公式如 $n=m/M$ 與化學式必須使用 LaTeX。絕對不准出測驗題。"
                 ]
                 res = model.generate_content(prompt)
-                teaching_txt = res.text
-                st.markdown(teaching_txt)
+                st.markdown(res.text)
                 
-                # 3. 語音生成 (準備供平板解鎖)
-                st.session_state.audio_data = asyncio.run(generate_voice(teaching_txt))
+                # 3. iPad 專用 Base64 音訊播放
+                st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
                 st.balloons()
-            except Exception as e:
-                st.error(f"連線失敗：{e}")
+            except Exception as e: st.error(f"導讀失敗：{e}")
 
-# --- 8. 平板音訊手動播放 (解決 iPad 靜音關鍵) ---
-if st.session_state.audio_data:
+# --- 9. iPad 音訊手動解鎖區 ---
+if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **平板教學提醒**：為了聽見助教講解，請點擊下方播放鈕解鎖音訊。")
-    st.audio(st.session_state.audio_data, format="audio/mp3")
+    st.info("🔊 **平板教學提醒**：請點擊下方播放鈕，聽取 AI 助教導讀內容。")
+    st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
