@@ -7,7 +7,7 @@ import io
 import re
 from PIL import Image
 
-# --- 1. 頁面配置 (全黑文字、翩翩體) ---
+# --- 1. 頁面配置 (翩翩體、全黑文字) ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
 st.markdown("""
@@ -34,12 +34,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心女聲引擎 (HsiaoChen 穩定版) ---
+# --- 2. 穩定版女聲引擎 (HsiaoChen) ---
 async def generate_voice(text):
-    # 移除 LaTeX 符號避免語音唸出程式碼
+    # 移除 LaTeX 符號與轉義字符，確保語音平順
     clean_text = re.sub(r'\$+', '', text)
+    clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     clean_text = clean_text.replace('*', '').replace('#', '').replace('\n', ' ')
-    # 換成穩定女聲：zh-TW-HsiaoChenNeural
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -47,8 +47,8 @@ async def generate_voice(text):
             audio_data += chunk["data"]
     return audio_data
 
-# --- 3. 學生快速指南 (簡化版) ---
-st.title("🔬 理化 AI 手搖飲實驗室")
+# --- 3. 學生 API 指南 ---
+st.title("理化 AI 手搖飲實驗室")
 
 st.markdown("""
 <div class="guide-box">
@@ -59,44 +59,50 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-user_key = st.text_input("🔑 在這裡貼上你的通行證：", type="password")
+user_key = st.text_input("在這裡貼上你的通行證：", type="password")
 
 if user_key:
     try:
         genai.configure(api_key=user_key)
-        st.success("✅ 通行證驗證成功！")
+        st.success("通行證驗證成功！")
     except:
-        st.error("❌ 金鑰格式錯誤。")
+        st.error("金鑰格式錯誤。")
 
 st.divider()
 
-# --- 4. 學生問答區 ---
-st.subheader("💬 學生提問區：拍照或打字問問題")
+# --- 4. 初始化 Session State (用於儲存隨機練習題) ---
+if 'current_quiz' not in st.session_state:
+    st.session_state.current_quiz = None
+if 'quiz_answered' not in st.session_state:
+    st.session_state.quiz_answered = False
+
+# --- 5. 學生問答專區 ---
+st.subheader("學生提問區：拍照或打字問問題")
 col_q, col_up = st.columns([1, 1])
 with col_q:
     student_q = st.text_input("輸入問題：", placeholder="例如：什麼是分子量？")
 with col_up:
-    uploaded_image = st.file_uploader("📷 拍照上傳題目：", type=["jpg", "png", "jpeg"])
+    uploaded_image = st.file_uploader("拍照上傳題目：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_image) and user_key:
     with st.spinner("👩‍🏫 AI 老師正在思考答案..."):
         try:
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            prompt = ["你是資深理化老師。化學式如 $CO_2$ 與公式如 $n=m/M$ 必須使用 LaTeX 格式。"]
+            prompt = ["你是資深理化老師。化學式如 $CO_2$ 與公式必須嚴格使用 LaTeX 格式。"]
             parts = prompt + ([Image.open(uploaded_image)] if uploaded_image else []) + ([f"問題：{student_q}"] if student_q else [])
             res = model.generate_content(parts)
-            st.info(f"👩‍🏫 老師解釋：\n\n{res.text}")
+            st.info(f"老師解釋：\n\n{res.text}")
         except Exception as e:
             st.error(f"連線失敗：{e}")
 
 st.divider()
 
-# --- 5. 講義頁碼導讀區 (回歸指定頁碼) ---
-st.subheader("🥤 自主學習區：翻開講義指定頁面")
+# --- 6. 講義頁碼導讀與引導式練習 ---
+st.subheader("自主學習區：翻開講義指定頁面")
 
-target_page = st.number_input("📖 請輸入你想學習的講義頁碼 (1-71)：", min_value=1, max_value=71, value=27)
+target_page = st.number_input("請輸入你想學習的講義頁碼 (1-71)：", min_value=1, max_value=71, value=27)
 
-if st.button(f"🚀 啟動第 {target_page} 頁互動教學"):
+if st.button(f"啟動第 {target_page} 頁教學"):
     if not user_key:
         st.warning("請先輸入通行證。")
     else:
@@ -107,34 +113,65 @@ if st.button(f"🚀 啟動第 {target_page} 頁互動教學"):
                     sample_file = genai.upload_file(path=file_path)
                     model = genai.GenerativeModel('models/gemini-2.5-flash')
                     
-                    # 強化隨機練習題的提示詞
+                    # 提示詞：要求結構化練習題
                     prompt_text = [
                         sample_file,
                         f"你是有 20 年資歷的理化老師。請針對講義第 {target_page} 頁教學。"
-                        "1. 開場說：各位同學好！今天老師感冒聲音沙啞，我們來看看這一頁。2. 完整列出該頁例題。 "
-                        "3. 使用珍珠奶茶比喻解釋原理。4. 化學式與公式必須嚴格使用 LaTeX 格式（如 $CO_2$, $n = \\frac{m}{M}$）。"
-                        "5. 教學結束後，請加上分隔線 '[QUIZ_START]'，並根據本頁內容出一道選擇題與答案。6. 提醒多喝溫水。"
+                        "1. 開場說：各位同學好！今天老師感冒沙啞，我們來看看這一頁。2. 完整列出該頁例題。"
+                        "3. 使用珍珠奶茶比喻解釋原理。公式如 $$n = \\frac{m}{M}$$ 必須使用 LaTeX 格式。"
+                        "4. 百分比符號必須轉義為 \\%（例如 V\\%）。"
+                        "5. 課程結束後，請精準使用標籤 '[QUIZ_DATA]' 包裹以下內容："
+                        "題目、選項A、選項B、選項C、選項D、正確選項字母、一個引導提示。"
+                        "6. 提醒多喝溫水。"
                     ]
                     
                     response = model.generate_content(prompt_text)
                     full_text = response.text
                     
-                    # 拆分內容與練習題
-                    parts = full_text.split("[QUIZ_START]")
-                    st.markdown(parts[0])
+                    # 拆分內容與後台練習數據
+                    content_parts = full_text.split("[QUIZ_DATA]")
+                    teaching_txt = content_parts[0]
+                    st.markdown(teaching_txt)
                     
-                    # 語音生成 (HsiaoChen 女聲)
-                    audio_bytes = asyncio.run(generate_voice(parts[0]))
+                    # 語音生成
+                    audio_bytes = asyncio.run(generate_voice(teaching_txt))
                     if audio_bytes:
                         st.audio(audio_bytes, format="audio/mp3")
                     
-                    # 顯示練習題
-                    if len(parts) > 1:
-                        st.success("📝 **隨堂隨機挑戰**")
-                        st.markdown(parts[1])
+                    # 儲存題目數據到 session_state
+                    if len(content_parts) > 1:
+                        st.session_state.current_quiz = content_parts[1]
+                        st.session_state.quiz_answered = False
                     
                     st.balloons()
                 except Exception as e:
                     st.error(f"連線出錯：{e}")
         else:
             st.error("找不到講義檔案。")
+
+# --- 7. 顯示引導式練習題界面 ---
+if st.session_state.current_quiz:
+    st.divider()
+    st.subheader("📝 隨堂挑戰：腦力激盪時間")
+    
+    quiz_raw = st.session_state.current_quiz
+    # 簡單的正則表達式或切分來提取題目資訊
+    # 這裡假設 AI 輸出的格式相對固定
+    st.info("請根據剛才的教學內容，選出正確答案：")
+    st.markdown(quiz_raw.split("正確選項")[0]) # 顯示題目與選項
+    
+    student_ans = st.radio("你的選擇是：", ["A", "B", "C", "D"], key="quiz_radio")
+    
+    if st.button("送出解答"):
+        # 從 quiz_raw 中提取正確答案字母
+        match = re.search(r"正確選項[：:\s]*([A-D])", quiz_raw)
+        hint_match = re.search(r"引導提示[：:\s]*(.*)", quiz_raw)
+        
+        correct_letter = match.group(1) if match else "A"
+        hint_text = hint_match.group(1) if hint_match else "再想一下頁面中的關鍵公式喔！"
+        
+        if student_ans == correct_letter:
+            st.success(f"🎯 太棒了！答案正是 {student_ans}。你完全掌握了這一頁的精髓！")
+            st.balloons()
+        else:
+            st.error(f"❌ 哎呀，不對喔！ HsiaoChen 老師的小提醒：{hint_text}")
