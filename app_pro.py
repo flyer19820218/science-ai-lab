@@ -8,7 +8,7 @@ import re
 import base64
 from PIL import Image
 
-# --- 1. 頁面配置 (全黑翩翩體、全黑文字、適應平板) ---
+# --- 1. 頁面配置 (全黑翩翩體、全黑文字、行動端適配) ---
 st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
@@ -20,7 +20,7 @@ st.markdown("""
     .guide-box {
         background-color: #fff9c4;
         padding: 15px;
-        border-radius: 12px;
+        border-radius: 10px;
         border: 2px solid #fbc02d;
         margin-bottom: 20px;
     }
@@ -34,9 +34,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心助教語音 (iPad 專用 Base64 強效封裝) ---
+# --- 2. 效能優化：Cache PDF 讀取 (避免手機版崩潰) ---
+@st.cache_resource
+def open_pdf_doc(path):
+    if os.path.exists(path):
+        return fitz.open(path)
+    return None
+
+# --- 3. 核心助教語音 (iPad 專用 Base64 方案) ---
 async def generate_voice_base64(text):
-    # 移除 LaTeX 符號，確保 HsiaoChen 老師唸得通順
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     clean_text = clean_text.replace('*', '').replace('#', '').replace('\n', ' ')
@@ -45,20 +51,10 @@ async def generate_voice_base64(text):
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             audio_data += chunk["data"]
-    # 封裝成 Base64 數據流，iPad Safari 絕對讀得到
     b64 = base64.b64encode(audio_data).decode()
-    return f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
+    return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
-# --- 3. 雲端截圖功能 ---
-def get_pdf_page_image(pdf_path, page_index):
-    doc = fitz.open(pdf_path)
-    page = doc.load_page(page_index)
-    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2)) 
-    img_data = pix.tobytes("png")
-    doc.close()
-    return img_data
-
-# --- 4. 72 頁熱血中二標題 (一頁不少，不偷懶版) ---
+# --- 4. 72 頁熱血中二標題 (一頁不少) ---
 page_titles = {
     1: "【禁忌的儀式：科學方法與變因】", 2: "【因果變律：實驗安全規範】", 3: "【平衡律：測量與天平操作】", 4: "【煉金基礎：物質密度奧義】",
     5: "【煉金呼吸：大氣製備禁咒】", 6: "【本質界線：純粹靈魂與混沌】", 7: "【提純程序：過濾與蒸發陣法】", 8: "【溶解契約：飽和溶液的極限】",
@@ -83,88 +79,74 @@ page_titles = {
 # --- 5. 初始化 Session ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 通行證指南 ---
 st.title("🥤 理化 AI 雞排珍奶實驗室 (助教版)")
-st.markdown("""
-<div class="guide-box">
-    <b>📖 學生快速通行指南：</b><br>
-    1. 點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 登入。<br>
-    2. 點擊 <b>Create API key</b>，<b>務必勾選兩次同意條款</b>後產生金鑰。<br>
-    3. 複製金鑰貼回下方即可開始「正在調製波霸奶茶」導讀模式。
-</div>
-""", unsafe_allow_html=True)
+st.markdown("""<div class="guide-box"><b>📖 快速指南：</b>貼上金鑰後，選擇單元章門即可。</div>""", unsafe_allow_html=True)
+user_key = st.text_input("🔑 通行證：", type="password")
 
-user_key = st.text_input("🔑 通行證輸入區：", type="password")
-st.divider()
-
-# --- 7. 學生提問區 ---
-st.subheader("💬 學生提問專區：拍照或打字問問題")
-col_q, col_up = st.columns([1, 1])
-with col_q: student_q = st.text_input("輸入問題：", placeholder="例如：什麼是分子量？")
-with col_up: uploaded_file = st.file_uploader("拍照上傳：", type=["jpg", "png", "jpeg"])
+# --- 6. 學生提問區 ---
+st.subheader("💬 提問專區")
+student_q = st.text_input("打字問助教：", placeholder="例如：為什麼水可以滅火？")
+uploaded_file = st.file_uploader("拍題目截圖：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
-    with st.spinner("正在調製波霸奶茶並思考答案..."):
+    with st.spinner("正在調製波霸奶茶..."):
         try:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            prompt_parts = ["你是資深理化 AI 助教。請用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
-            if uploaded_file: prompt_parts.append(Image.open(uploaded_file))
-            if student_q: prompt_parts.append(f"學生問題：{student_q}")
-            res = model.generate_content(prompt_parts)
+            parts = ["你是資深理化 AI 助教。用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
+            if uploaded_file: parts.append(Image.open(uploaded_file))
+            if student_q: parts.append(student_q)
+            res = model.generate_content(parts)
             st.info(f"💡 助教解答：\n\n{res.text}")
         except Exception as e: st.error(f"思考失敗：{e}")
 
 st.divider()
 
-# --- 8. 五大門派雙選單 (1-72 頁全開) ---
-st.subheader("📖 真理之書：選擇學習單元")
-parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
+# --- 7. 五大門派雙選單 (72 頁) ---
+st.subheader("📖 選擇學習單元")
+parts_list = ["【一：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("第一步：選擇大章節", parts_list)
 
-if "第一門" in part_choice: r = range(1, 16)
+if "一" in part_choice: r = range(1, 16)
 elif "二" in part_choice: r = range(16, 27)
 elif "三" in part_choice: r = range(27, 41)
 elif "四" in part_choice: r = range(41, 55)
 else: r = range(55, 73)
 
-options = [f"第 {p} 頁：{page_titles.get(p, '單元重點')}" for p in r]
-selected_page_str = st.selectbox("第二步：選擇精確單元名稱 (不跳頁)", options)
+options = [f"第 {p} 頁：{page_titles.get(p, '單元內容')}" for p in r]
+selected_page_str = st.selectbox("第二步：精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-if st.button(f"🚀 啟動【第 {target_page} 頁】圖文導讀"):
+# --- 8. 核心導讀按鈕 ---
+if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
     if not user_key:
-        st.warning("請先輸入通行證。")
+        st.warning("請先輸入金鑰。")
     else:
-        genai.configure(api_key=user_key)
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        # --- 調製波霸奶茶 spinner ---
         with st.spinner("正在調製波霸奶茶..."):
             try:
-                # 1. 雲端截圖
-                page_img = get_pdf_page_image(path_finals, target_page - 1)
-                st.image(page_img, caption=f"講義第 {target_page} 頁：{page_titles[target_page]}", use_column_width=True)
+                # 1. 高效率截圖
+                doc = open_pdf_doc(path_finals)
+                if doc:
+                    page = doc.load_page(target_page - 1)
+                    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) # 手機版稍微降解析度保證不崩潰
+                    st.image(pix.tobytes("png"), caption=f"講義：{page_titles[target_page]}", use_column_width=True)
                 
-                # 2. AI 講解 (講義優先)
+                # 2. AI 講解
+                genai.configure(api_key=user_key)
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
-                prompt = [
-                    file_obj,
-                    f"你是資深理化 AI 助教。1. 請針對講義第 {target_page} 頁內容進行精確導讀。"
-                    f"2. **【核心任務】**：優先詳細講解該頁面上的所有內容。"
-                    "3. 開場白請生活化，一定要提到『雞排配大杯珍奶』。說各位同學好！今天助教感冒沙啞。"
-                    "4. 公式如 $n=m/M$ 與化學式必須使用 LaTeX。珍珠量比喻莫耳數。5. 絕對不准出測驗題。"
-                ]
+                prompt = [file_obj, f"你是理化 AI 助教。詳細講解講義第 {target_page} 頁。用雞排配大杯珍奶開場。公式必須 LaTeX。絕對不准出測驗。"]
                 res = model.generate_content(prompt)
                 st.markdown(res.text)
                 
-                # 3. iPad 專用音訊播放器
+                # 3. iPad/手機音訊封裝
                 st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
                 st.balloons()
             except Exception as e: st.error(f"導讀失敗：{e}")
 
-# --- 9. iPad 音訊手動解鎖區 ---
+# --- 9. iPad 音訊解鎖區 ---
 if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **平板教學提醒**：請點擊下方播放鈕，聽取 AI 助教導讀內容。")
+    st.info("🔊 **平板/手機提醒**：請點擊播放鈕聽助教導讀。")
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
