@@ -6,15 +6,21 @@ import edge_tts
 import io
 from PIL import Image
 
-# --- 1. 頁面配置 (回歸最穩定模式) ---
+# --- 1. 頁面配置 (全黑字體與翩翩體) ---
 st.set_page_config(page_title="理化 AI 手搖飲實驗室", layout="wide")
 
-# 僅保留基本字體與全黑文字設定
 st.markdown("""
     <style>
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, span, label, li {
         color: #000000 !important;
         font-family: 'HanziPen SC', '翩翩體', 'KaiTi', sans-serif !important;
+    }
+    .guide-box {
+        background-color: #f1f8e9;
+        padding: 20px;
+        border-radius: 12px;
+        border: 2px dashed #8bc34a;
+        margin-bottom: 20px;
     }
     .stButton>button {
         background-color: #e3f2fd !important;
@@ -27,7 +33,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心男聲引擎 (Yunxi) ---
+# --- 2. 穩定版男聲引擎 ---
 async def generate_voice(text):
     communicate = edge_tts.Communicate(text, "zh-TW-YunxiNeural", rate="-5%")
     audio_data = b""
@@ -36,35 +42,38 @@ async def generate_voice(text):
             audio_data += chunk["data"]
     return audio_data
 
-# --- 3. 學生 API 通行證：保姆級 6 步教學 (移除所有符號避免亂碼) ---
+# --- 3. 學生 API 通行證：保姆級 6 步教學 (完全攤開避免亂碼) ---
 st.title("理化 AI 手搖飲實驗室")
 
-# 這裡不使用自定義 class，直接用標準 expander
-with st.expander("各位同學好！點此查看取得通行證詳細步驟", expanded=True):
-    st.write("步驟 1：點擊連結開啟網頁：[Google AI Studio](https://aistudio.google.com/app/apikey)")
-    st.write("步驟 2：請務必使用個人 Gmail 帳號登入。")
-    st.write("步驟 3：點擊畫面上的藍色按鈕 Create API key。")
-    st.write("步驟 4：選擇 Create API key in new project。")
-    st.write("步驟 5：看到代碼後，點擊 Copy 複製起來。")
-    st.write("步驟 6：回到本網頁，將代碼貼在下方輸入框，按下 Enter。")
+st.markdown("""
+<div class="guide-box">
+    <b>各位同學好！請照著以下步驟取得你的 AI 通行證：</b><br><br>
+    步驟 1：點擊連結：<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a><br>
+    步驟 2：請使用個人 Gmail 帳號登入。<br>
+    步驟 3：點擊 Create API key 按鈕。<br>
+    步驟 4：選擇 Create API key in new project。<br>
+    步驟 5：點擊 Copy 複製那串英文金鑰。<br>
+    步驟 6：回到本網頁，將金鑰貼在下方輸入框，按下 Enter。
+</div>
+""", unsafe_allow_html=True)
 
 user_key = st.text_input("在這裡貼上你的 API 通行證：", type="password")
 
 if user_key:
     try:
         genai.configure(api_key=user_key)
-        st.success("通行證驗證成功！")
+        st.success("通行證驗證成功！正在啟動 Gemini 2.5 Flash 老師...")
     except:
-        st.error("金鑰有誤，請檢查。")
+        st.error("金鑰格式錯誤，請重新複製貼上。")
 
 st.divider()
 
-# --- 4. 學生問答專區 (支援拍照) ---
+# --- 4. 學生問答專區 (支援拍照提問) ---
 st.subheader("學生提問區：拍照或打字問 AI 老師")
-col1, col2 = st.columns([1, 1])
-with col1:
+col_txt, col_img = st.columns([1, 1])
+with col_txt:
     student_q = st.text_input("輸入問題：", placeholder="例如：什麼是分子量？")
-with col2:
+with col_img:
     uploaded_file = st.file_uploader("拍照上傳題目：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
@@ -77,7 +86,7 @@ if (student_q or uploaded_file) and user_key:
             res = model.generate_content(prompt)
             st.info(f"老師解釋：\n\n{res.text}")
         except Exception as e:
-            if "429" in str(e): st.error("流量上限！請等 1 分鐘再點一次。")
+            if "429" in str(e): st.error("流量上限！請等 1 分鐘再問。")
             else: st.error(f"連線失敗：{e}")
 
 st.divider()
@@ -98,8 +107,8 @@ if st.button("啟動互動教學內容 (含男聲與進度條)"):
                     prompt_text = [
                         sample_file,
                         "你是有 20 年資歷的男理化老師。請根據講義第 27 頁教學。"
-                        "1. 開場說：各位同學好！歡迎來到理化教室。今天老師感冒聲音沙啞，但為了你們最愛的珍奶，我們來聊聊莫耳數。"
-                        "2. 完整列出講義中的例題題目內容。3. 使用珍珠奶茶珍珠量解釋 n = m / M。"
+                        "1. 開場說：各位同學好！歡迎來到理化教室。今天老師聲音沙啞，但為了你們最愛的珍奶，我們來聊聊莫耳數。"
+                        "2. 完整列出講義中的例題題目內容。3. 使用珍珠奶茶珍珠量解釋公式 n = m / M。"
                         "4. 最後提醒多喝溫水，注意身體健康。"
                     ]
                     response = model.generate_content(prompt_text)
@@ -109,35 +118,35 @@ if st.button("啟動互動教學內容 (含男聲與進度條)"):
                     clean_text = response.text.replace('$', '').replace('*', '').replace('#', '').replace('\n', ' ')
                     audio_bytes = asyncio.run(generate_voice(clean_text))
                     st.audio(audio_bytes, format="audio/mp3")
+                    st.caption("學生可以拉動上方進度條重聽，或調整播放速度。")
                     st.balloons()
                 except Exception as e:
-                    if "429" in str(e): st.error("流量爆了！請等待 1 分鐘後再點。")
+                    if "429" in str(e): st.error("流量上限！請等待 1 分鐘後再點擊。")
                     else: st.error(f"語音生成失敗：{e}")
         else:
             st.error("找不到講義檔案。")
 
 st.divider()
 
-# --- 6. 階段性闖關練習 (原汁原味回歸) ---
+# --- 6. 階段性闖關練習 ---
 st.subheader("隨堂挑戰：你懂了嗎？")
 if 'quiz_step' not in st.session_state: st.session_state.quiz_step = 0
 
 if st.session_state.quiz_step == 0:
     st.write("第一題：珍珠杯數挑戰")
-    st.write("一杯珍奶的珍珠重 50g (M)，現在給你 400g 的珍珠 (m)，請問可以裝成幾杯珍奶 (n)？")
+    st.write("一杯珍奶的珍珠重 50g ($M$)，現在店長給你 400g 的珍珠 ($m$)，請問可以裝成幾杯珍奶 ($n$)？")
     ans1 = st.text_input("你的答案：", key="a1")
     if st.button("送出解答"):
         if ans1 == "8":
-            st.success("答對了！ n = 400 / 50 = 8 杯。")
+            st.success("答對了！ $n = 400 / 50 = 8$ 杯。")
             st.session_state.quiz_step = 1; st.rerun()
         else: st.error("再算算看喔！")
 
 elif st.session_state.quiz_step == 1:
     st.write("第二題：理化魔王實戰")
-    st.write("二氧化碳 (CO2) 的分子量 (M) 是 44。如果你有 88g 的二氧化碳 (m)，是多少莫耳 (n)？")
+    st.write("二氧化碳 ($CO_2$) 的分子量 ($M$) 是 44。如果你有 88g 的二氧化碳 ($m$)，是多少莫耳 ($n$)？")
     ans2 = st.text_input("你的答案：", key="a2")
-    if st.button("確認挑戰結果"):
+    if st.button("確認結果"):
         if ans2 == "2":
-            st.balloons(); st.success("超級優秀！ 88 / 44 = 2 莫耳。")
+            st.balloons(); st.success("超級優秀！ $88 / 44 = 2$ 莫耳。")
             if st.button("重新練習"): st.session_state.quiz_step = 0; st.rerun()
-        else: st.error("再想想看，方法跟算珍奶杯數一樣喔！")
