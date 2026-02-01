@@ -39,7 +39,7 @@ student_q = st.text_input("學生問：", placeholder="例如：什麼是分子�
 if student_q and user_key:
     with st.spinner("AI 老師正在思考中文解釋..."):
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-2.5-flash')
             prompt_q = f"你是理化老師。請回答學生：'{student_q}'。要求：1. 語氣溫暖。2. 術語後加註中文。3. 解說極其簡單。"
             res = model.generate_content(prompt_q)
             st.info(f"👨‍🏫 **老師解釋：**\n\n{res.text}")
@@ -68,7 +68,7 @@ if st.button("🚀 讀取講義並生成教學導讀"):
             with st.spinner("正在為您研讀講義..."):
                 try:
                     sample_file = genai.upload_file(path=file_path)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     main_prompt = [
                         sample_file,
                         "你是有 20 年資歷的理化老師。請根據講義第 27 頁，用『買蘋果』解釋 n = m / M。"
