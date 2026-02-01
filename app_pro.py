@@ -2,10 +2,9 @@ import streamlit as st
 import google.generativeai as genai
 import os
 
-# --- 1. 頁面配置 (維持老師最愛的風格) ---
-st.set_page_config(page_title="理化魂：AI 互動實驗室", layout="wide")
+# --- 1. 頁面配置 (維持清爽翩翩體) ---
+st.set_page_config(page_title="20年理化魂：AI 互動實驗室", layout="wide")
 
-# 強制黑字與翩翩體
 st.markdown("""
     <style>
     html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, span, label, li {
@@ -25,67 +24,66 @@ st.markdown("""
 # --- 2. 學生 API 金鑰引導 ---
 st.title("🔬 20年理化魂：AI 互動實驗室")
 st.markdown("""
-    ### 🔑 學生登入區
-    各位同學，在使用 AI 助教前，請先取得你自己的「數位通行證」：
-    1. 點擊 **[取得 Gemini API Key](https://aistudio.google.com/app/apikey)** (需登入 Google 帳號)。
-    2. 點擊 "Create API key in new project"。
-    3. 將那一串代碼貼在下方輸入框。
+    ### 🔑 學生通行證領取處
+    各位同學，請先跟著步驟領取你的「數位通行證」：
+    1. 點擊 **[👉 取得自己的 Gemini API Key](https://aistudio.google.com/app/apikey)**。
+    2. 點擊 "Create API key in new project" 並複製。
+    3. 將代碼貼在下方輸入框，就能啟動 AI 老師囉！
 """)
 
-user_key = st.text_input("貼上你的 API Key：", type="password")
+user_key = st.text_input("請輸入你的 API 通行證：", type="password")
 
 if user_key:
     try:
+        # 使用老師指定的最新型號
         genai.configure(api_key=user_key)
-        st.success("✅ 驗證成功！實驗室設備已啟動。")
+        st.success("✅ 驗證成功！實驗設備已啟動。")
     except:
-        st.error("⚠️ 金鑰無效，請重新檢查。")
+        st.error("⚠️ 金鑰有誤，請檢查後重新貼上。")
 else:
-    st.info("💡 尚未偵測到金鑰，請先完成上方步驟。")
+    st.info("💡 尚未輸入通行證，請先完成上方步驟。")
 
 st.divider()
 
-# --- 3. 學生提問區 (中文加註) ---
-st.subheader("💬 理化問題快問快答")
-student_q = st.text_input("有什麼不懂的概念？直接問老師：", placeholder="例如：為什麼原子量沒有單位？")
+# --- 3. 學生提問區 ---
+st.subheader("💬 理化概念快問快答")
+student_q = st.text_input("對剛才上課內容有疑問嗎？直接問：", placeholder="例如：1 莫耳到底有多少個原子？")
 
 if student_q and user_key:
     with st.spinner("AI 老師正在組織易懂的答案..."):
         try:
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            prompt_q = f"你是資深理化老師。請回答學生問題：'{student_q}'。要求：1. 開場要說『各位同學好』。2. 術語後方必須括號標註中文註解。3. 舉例要生活化。"
+            model = genai.GenerativeModel('gemini-2.0-flash')
+            prompt_q = f"你是資深理化老師。請回答學生：'{student_q}'。要求：1. 開場說『各位同學好』。2. 術語後加註中文。3. 解說要讓國二學生也聽懂。"
             res = model.generate_content(prompt_q)
-            st.info(f"👨‍🏫 **AI 老師回覆：**\n\n{res.text}")
+            st.info(f"👨‍🏫 **老師解釋：**\n\n{res.text}")
         except Exception as e:
             st.error(f"連線出錯：{e}")
 
 st.divider()
 
-# --- 4. 莫耳數魔王挑戰 (買蘋果比喻) ---
+# --- 4. 莫耳數魔王挑戰 ---
 st.subheader("🍎 莫耳數 $n = m/M$ 攻略")
-if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals.pdf)"):
+if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals 講義)"):
     if not user_key:
-        st.warning("請先輸入金鑰。")
+        st.warning("請先輸入通行證。")
     else:
-        # 相對路徑讀取 Ph_Ch_finals.pdf
+        # --- 相對路徑讀取 Ph_Ch_finals.pdf ---
         base_path = os.path.dirname(__file__)
         file_path = os.path.join(base_path, "..", "data", "Ph_Ch_finals.pdf")
         
         if os.path.exists(file_path):
-            with st.spinner("AI 老師正在翻閱講義..."):
+            with st.spinner("老師正在為大家翻閱講義..."):
                 try:
                     sample_file = genai.upload_file(path=file_path)
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-2.0-flash')
                     
-                    # 針對學生的最終 Prompt
                     main_prompt = [
                         sample_file,
                         "你是有 20 年資歷的理化老師。請根據講義第 27 頁，對學生進行教學。"
-                        "要求：1. 開場必須是：『各位同學好，歡迎來到理化教室！今天老師聲音有點沙啞，但我們要來攻克最難的莫耳數...』"
+                        "要求：1. 開場說：『各位同學好！今天老師身體微恙，聲音有點沙啞，但我們會一起攻克最難的莫耳數...』"
                         "2. 使用『買蘋果』的比喻解釋公式 n = m / M。"
                         "3. 所有的英文術語（如 Mole, Mass）必須加註中文。"
-                        "4. 內容要幽默好懂，適合國二學生。"
-                        "5. 最後要提醒學生：『老師雖然感冒了，但還是會陪著大家一起學習，大家也要注意身體喔！』"
+                        "4. 最後提醒大家：『老師雖然感冒了，但會陪著大家學習，你們也要多喝水、多休息喔！』"
                     ]
                     
                     response = model.generate_content(main_prompt)
@@ -94,4 +92,5 @@ if st.button("🚀 啟動互動教學 (讀取 Ph_Ch_finals.pdf)"):
                 except Exception as e:
                     st.error(f"生成失敗：{e}")
         else:
-            st.error(f"找不到講義 Ph_Ch_finals.pdf，請確認檔案已上傳至 data 資料夾。")
+            # 報錯時顯示路徑，方便老師在 GitHub Desktop 確認
+            st.error(f"找不到講義 Ph_Ch_finals.pdf！目前偵測路徑：{file_path}。請確認 GitHub 上的檔案名稱大小寫完全一致。")
