@@ -14,12 +14,12 @@ except ImportError:
     st.error("❌ 偵測到零件缺失！請確保 GitHub 中有 requirements.txt 並包含 pymupdf。")
     st.stop()
 
-# --- 1. 頁面配置 (白晝協議 + 行動端完全防溢位) ---
+# --- 1. 頁面配置 (全能適配 + 深度白晝協議) ---
 st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
     <style>
-    /* A. 全域白晝協議：強制背景與文字顏色 */
+    /* 1. 基礎防禦：強制所有背景為白色，文字為全黑 */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
         background-color: #ffffff !important;
     }
@@ -28,66 +28,54 @@ st.markdown("""
         font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', 'Heiti TC', 'Microsoft JhengHei', sans-serif !important;
     }
 
-    /* B. 行動端防溢位優化：移除欄位限制，確保不滿出來 */
-    [data-testid="stAppViewBlockContainer"] {
-        padding: 1.5rem 1rem !important;
+    /* 2. 重點突擊：針對蘋果手機「拉把 (Selectbox)」彈出選單的黑底修正 */
+    /* 這段是專門抓取那些「脫逃」到網頁底層的下拉清單 */
+    div[data-baseweb="popover"], div[data-baseweb="listbox"], ul[role="listbox"], li[role="option"] {
+        background-color: #ffffff !important;
+        color: #000000 !important;
     }
-    h1 { font-size: calc(1.5rem + 1vw) !important; text-align: center; }
+    li[role="option"] div, li[role="option"] span {
+        color: #000000 !important;
+        background-color: #ffffff !important;
+    }
 
-    /* C. 提問區組件優化：解決「黑底黑字」與「輸入框溢位」 */
-    div[data-testid="stTextInput"] input {
+    /* 3. 空間重構：提問區改為上下堆疊，防止按鈕擠壓溢位 */
+    [data-testid="stAppViewBlockContainer"] { padding: 1.5rem 1rem !important; }
+    h1 { font-size: calc(1.4rem + 1vw) !important; text-align: center; }
+
+    /* 4. 組件鎖定：打字區與下拉選單本體 (白底黑字) */
+    div[data-testid="stTextInput"] input, div[data-baseweb="select"], div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 2px solid #000000 !important;
     }
 
-    /* D. 拍照截圖區：強力中文化與空間校準 */
-    [data-testid="stFileUploader"] section {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border: 2px dashed #000000 !important;
-        padding: 10px !important;
-    }
-    [data-testid="stFileUploader"] button {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border: 1px solid #000000 !important;
-    }
-    /* 暴力替換 Browse files 文字 */
+    /* 5. 拍照截圖區：中文化與白晝鎖定 */
+    [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 2px dashed #000000 !important; }
+    [data-testid="stFileUploader"] button { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #000000 !important; }
     [data-testid="stFileUploader"] button div span { font-size: 0 !important; }
-    [data-testid="stFileUploader"] button div span::before {
-        content: "瀏覽檔案" !important;
-        font-size: 1rem !important;
-        color: #000000 !important;
-    }
+    [data-testid="stFileUploader"] button div span::before { content: "瀏覽檔案" !important; font-size: 1rem !important; color: #000000 !important; }
 
-    /* E. 黃色導覽框鎖定 */
-    .guide-box {
-        background-color: #fff9c4 !important;
-        color: #000000 !important;
-        padding: 15px;
-        border-radius: 12px;
-        border: 2px solid #fbc02d;
-        margin-bottom: 20px;
-    }
-
-    /* F. 按鈕行動優化 */
+    /* 6. 按鈕行動端適配：100% 寬度好點擊 */
     div.stButton > button {
         background-color: #e3f2fd !important; 
         color: #000000 !important;
         border: 2px solid #01579b !important;
         border-radius: 12px !important;
-        font-weight: bold !important;
         width: 100% !important;
         height: 3.5rem !important;
     }
 
-    /* G. LaTeX 公式與下拉選單鎖定 */
+    /* 7. LaTeX 顏色鎖定 */
     .katex { color: #000000 !important; }
-    div[data-baseweb="select"], div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+
+    /* 8. 最終防禦：針對手機暗色模式的硬性覆蓋 */
+    @media (prefers-color-scheme: dark) {
+        .stApp, div[data-testid="stTextInput"] input, section[data-testid="stFileUploader"], [data-testid="stFileUploader"] button, div[data-baseweb="popover"] {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
