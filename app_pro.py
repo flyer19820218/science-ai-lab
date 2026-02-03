@@ -19,7 +19,6 @@ st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. 基礎防禦：強制白底黑字 */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
         background-color: #ffffff !important;
     }
@@ -27,72 +26,38 @@ st.markdown("""
         color: #000000 !important;
         font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', sans-serif !important;
     }
-
-    /* 2. 蘋果手機專用：修正 Selectbox 彈出選單黑底 */
     div[data-baseweb="popover"], div[data-baseweb="listbox"], ul[role="listbox"], li[role="option"] {
-        background-color: #ffffff !important;
-        color: #000000 !important;
+        background-color: #ffffff !important; color: #000000 !important;
     }
-    li[role="option"] div, li[role="option"] span {
-        color: #000000 !important;
-        background-color: #ffffff !important;
-    }
-
-    /* 3. API 指南框：馬斯克風格 */
-    .guide-box {
-        border: 2px dashed #01579b;
-        padding: 1.5rem;
-        border-radius: 12px;
-        background-color: #f0f8ff;
-        line-height: 1.6;
-        color: #000000;
-    }
-
-    /* 4. 組件鎖定：打字區與選單白底黑框 */
     div[data-testid="stTextInput"] input, div[data-baseweb="select"], div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        border: 2px solid #000000 !important;
+        background-color: #ffffff !important; color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important; border: 2px solid #000000 !important;
     }
-
-    /* 5. 按鈕設計：100% 寬度 */
     div.stButton > button {
-        background-color: #e3f2fd !important; 
-        color: #000000 !important;
-        border: 2px solid #01579b !important;
-        border-radius: 12px !important;
-        width: 100% !important;
-        height: 3.5rem !important;
+        background-color: #e3f2fd !important; color: #000000 !important;
+        border: 2px solid #01579b !important; border-radius: 12px !important;
+        width: 100% !important; height: 3.5rem !important;
     }
-
+    .guide-box { border: 2px dashed #01579b; padding: 1.5rem; border-radius: 12px; background-color: #f0f8ff; color: #000000; }
     .katex { color: #000000 !important; }
-
-    /* 6. 手機暗色模式硬性覆蓋 */
     @media (prefers-color-scheme: dark) {
         .stApp, div[data-testid="stTextInput"] input, [data-testid="stFileUploader"] section {
-            background-color: #ffffff !important;
-            color: #000000 !important;
+            background-color: #ffffff !important; color: #000000 !important;
         }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心助教語音 (曉臻 HsiaoChen：數學公式口語化模式) ---
+# --- 2. 曉臻語音引擎 (純淨播音模式) ---
 async def generate_voice_base64(text):
-    # 【公式轉譯協議】：將符號轉為老師口播文字
-    clean_text = re.sub(r'\$+', '', text)
-    clean_text = clean_text.replace('/', '除以').replace('*', '乘以').replace('=', '等於')
-    clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
-    
-    # 召喚曉臻 HsiaoChen
+    # 只保留中文字與基本標點，徹底清除所有代碼殘留
+    clean_text = re.sub(r'[^\w\u4e00-\u9fff\d，。！？「」]', '', text)
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
         if chunk["type"] == "audio": audio_data += chunk["data"]
-            
     b64 = base64.b64encode(audio_data).decode()
-    return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
+    return f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
 # --- 3. 圖片提取 ---
 def get_pdf_page_image(pdf_path, page_index):
@@ -125,91 +90,85 @@ page_titles = {
     69: "【磁魂覺醒：右手定則】", 70: "【勞倫茲怒：開掌定則】", 71: "【旋轉輪迴：直流電動機】", 72: "【發電機覺醒：冷次定律】"
 }
 
-# --- 5. 初始化 Session ---
+# --- 5. 初始化 ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 核心 API 通行證指南 (馬斯克助教版) ---
-st.title("🚀 理化 AI 雞排珍奶實驗室 (馬斯克助教版)")
-st.markdown("""
-<div class="guide-box">
-    <b>📖 學生快速通行指南：</b><br>
-    1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
-    2. 點擊 <b>Create API key</b>，<b>務必勾選兩次同意條款</b>。<br>
-    3. 貼回下方「通行證」欄位按 Enter 啟動馬斯克。
-</div>
-""", unsafe_allow_html=True)
-
+# --- 6. API 通行指南 ---
+st.title("🚀 理化 AI 雞排珍奶實驗室 (曉臻助教版)")
+st.markdown("""<div class="guide-box"><b>📖 學生快速通行指南：</b><br>1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 獲取金鑰。<br>2. 貼回下方並按 Enter，開啟曉臻助教的沉浸式教學。</div>""", unsafe_allow_html=True)
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
 st.divider()
 
-# --- 7. 學生問問題區 + 照片區 ---
+# --- 7. 學生問問題區 ---
 st.subheader("💬 學生問問題區")
-student_q = st.text_input("打字問助教：", placeholder="例如：莫耳數怎麼算？")
-uploaded_file = st.file_uploader("📸 照片區 (上傳題目截圖)：", type=["jpg", "png", "jpeg"])
+student_q = st.text_input("打字問曉臻：", placeholder="例如：比熱怎麼算？")
+uploaded_file = st.file_uploader("📸 照片區：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
     with st.spinner("正在調製波霸奶茶..."):
         try:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            parts = ["你是資深理化助教。請用雞排配大杯珍奶解釋。公式必須嚴格使用 LaTeX。"]
+            parts = ["你是助教曉臻。用雞排配珍奶解釋。公式使用 LaTeX。"]
             if uploaded_file: parts.append(Image.open(uploaded_file))
             if student_q: parts.append(student_q)
             res = model.generate_content(parts)
-            st.info(f"💡 助教解答：\n\n{res.text}")
+            st.info(f"💡 曉臻解答：\n\n{res.text}")
         except Exception as e: st.error(f"思考失敗：{e}")
 
 st.divider()
 
 # --- 8. 五大門派選單 ---
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
-part_choice = st.selectbox("第一步：選擇大章節", parts_list)
-
-if "一" in part_choice: r = range(1, 16)
-elif "二" in part_choice: r = range(16, 27)
-elif "三" in part_choice: r = range(27, 41)
-elif "四" in part_choice: r = range(41, 55)
-else: r = range(55, 73)
-
-options = [f"第 {p} 頁：{page_titles.get(p, '單元重點')}" for p in r]
-selected_page_str = st.selectbox("第二步：精確單元名稱", options)
+part_choice = st.selectbox("大章節", parts_list)
+r = range(1, 16) if "一" in part_choice else range(16, 27) if "二" in part_choice else range(27, 41) if "三" in part_choice else range(41, 55) if "四" in part_choice else range(55, 73)
+options = [f"第 {p} 頁：{page_titles.get(p, '單元')}" for p in r]
+selected_page_str = st.selectbox("精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-# --- 9. 啟動導讀區 (API 核心 6 項提示協議) ---
-if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
-    if not user_key:
-        st.warning("請先輸入金鑰。")
+# --- 9. 啟動導讀 (雙軌：聲畫分離協定) ---
+if st.button(f"🚀 啟動【第 {target_page} 頁】沉浸式導讀"):
+    if not user_key: st.warning("請先輸入金鑰。")
     else:
         genai.configure(api_key=user_key)
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        with st.spinner("正在調製波霸奶茶並計算莫耳量..."):
+        with st.spinner("曉臻正在純化劇本..."):
             try:
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
-                st.image(page_img, caption=f"講義：{page_titles[target_page]}", use_column_width=True)
-                
+                st.image(page_img, use_column_width=True)
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # --- 🎯 API 核心 6 項提示鎖定 ---
-                prompt_content = [file_obj, f"""你是理化 AI 助教。詳細講解講義第 {target_page} 頁內容。
-開場請使用雞排配大杯珍奶風格。
-【語音優化 6 項指令】：
-1. 畫面顯示必須使用 LaTeX 格式。但口播台詞嚴禁出現「/」、「斜線」或「Slash」。
-2. 看到 n=m/M，台詞必須寫成：「莫耳數等於質量除以分子量」。
-3. 嚴禁反問使用者任何問題。
-4. 看到符號請直接稱呼其物理意義（例如 n 叫莫耳數，m 叫質量）。
-5. 口吻必須熱血、積極，充滿對科學的狂熱。
-6. 結尾要帥氣地大喊：「這就是理化的真理！」"""]
+                # --- 🎯 雙軌 Prompt：將視覺與聽覺完全拆分 ---
+                prompt_content = [file_obj, f"""你是資深理化助教曉臻。講解第 {target_page} 頁。
+
+請將回答嚴格分為兩部分，並用標籤分隔：
+【視覺內容】：給學生看著講義聽課用的 Markdown 筆記。公式請用 LaTeX 寫得漂亮。
+【聽覺劇本】：曉臻要唸出來的口語。請將所有公式轉換為老師上課唸的中文字。
+
+聽覺劇本 6 指令：
+1. 嚴禁出現符號、斜線或 LaTeX。
+2. n=m/M 唸作「莫耳數等於質量除以分子量」。
+3. 語氣熱血狂熱，像馬斯克在上課。
+4. 絕對不准反問學生問題。
+5. 變數一律稱呼物理意義（如 n 是莫耳數）。
+6. 結尾大喊：「這就是理化的真理！」"""]
 
                 res = model.generate_content(prompt_content)
-                st.markdown(res.text)
-                st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
+                full_text = res.text
+                
+                # 執行雙軌拆分
+                display_part = full_text.split("【聽覺劇本】")[0].replace("【視覺內容】", "").strip()
+                audio_part = full_text.split("【聽覺劇本】")[-1].strip() if "【聽覺劇本】" in full_text else display_part
+                
+                # 畫面上只顯示【視覺內容】
+                st.markdown(display_part)
+                # 曉臻只唸【聽覺劇本】，且文字不顯示在畫面上
+                st.session_state.audio_html = asyncio.run(generate_voice_base64(audio_part))
                 st.balloons()
-            except Exception as e:
-                st.error(f"實驗異常：{e}")
+            except Exception as e: st.error(f"異常：{e}")
 
-# --- 10. 語音播放區 ---
 if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **曉臻老師導讀中**：")
+    st.info("🔊 **曉臻助教正在口播真理...**")
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
