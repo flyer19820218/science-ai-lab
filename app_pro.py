@@ -7,7 +7,7 @@ import re
 import base64
 from PIL import Image
 
-# --- 零件檢查：防止雲端崩潰 ---
+# --- 零件檢查 ---
 try:
     import fitz
 except ImportError:
@@ -19,7 +19,6 @@ st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
     <style>
-    /* 1. 基礎防禦：強制所有背景為白色，文字為全黑 */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
         background-color: #ffffff !important;
     }
@@ -27,37 +26,16 @@ st.markdown("""
         color: #000000 !important;
         font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', 'Heiti TC', 'Microsoft JhengHei', sans-serif !important;
     }
-
-    /* 2. 重點突擊：針對蘋果手機「拉把 (Selectbox)」彈出選單的黑底修正 */
-    /* 這段是專門抓取那些「脫逃」到網頁底層的下拉清單 */
     div[data-baseweb="popover"], div[data-baseweb="listbox"], ul[role="listbox"], li[role="option"] {
         background-color: #ffffff !important;
         color: #000000 !important;
     }
-    li[role="option"] div, li[role="option"] span {
-        color: #000000 !important;
-        background-color: #ffffff !important;
-    }
-
-    /* 3. 空間重構：提問區改為上下堆疊，防止按鈕擠壓溢位 */
-    [data-testid="stAppViewBlockContainer"] { padding: 1.5rem 1rem !important; }
-    h1 { font-size: calc(1.4rem + 1vw) !important; text-align: center; }
-
-    /* 4. 組件鎖定：打字區與下拉選單本體 (白底黑字) */
     div[data-testid="stTextInput"] input, div[data-baseweb="select"], div[data-baseweb="select"] > div {
         background-color: #ffffff !important;
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         border: 2px solid #000000 !important;
     }
-
-    /* 5. 拍照截圖區：中文化與白晝鎖定 */
-    [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 2px dashed #000000 !important; }
-    [data-testid="stFileUploader"] button { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #000000 !important; }
-    [data-testid="stFileUploader"] button div span { font-size: 0 !important; }
-    [data-testid="stFileUploader"] button div span::before { content: "瀏覽檔案" !important; font-size: 1rem !important; color: #000000 !important; }
-
-    /* 6. 按鈕行動端適配：100% 寬度好點擊 */
     div.stButton > button {
         background-color: #e3f2fd !important; 
         color: #000000 !important;
@@ -66,38 +44,23 @@ st.markdown("""
         width: 100% !important;
         height: 3.5rem !important;
     }
-
-    /* 7. LaTeX 顏色鎖定 */
     .katex { color: #000000 !important; }
-
-    /* 8. 最終防禦：針對手機暗色模式的硬性覆蓋 */
-    @media (prefers-color-scheme: dark) {
-        .stApp, div[data-testid="stTextInput"] input, section[data-testid="stFileUploader"], [data-testid="stFileUploader"] button, div[data-baseweb="popover"] {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-        }
-    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心助教語音 (iPad 專用 Base64 強效方案) ---
+# --- 2. 核心助教語音 (曉臻 100% 正確版) ---
 async def generate_voice_base64(text):
-    # --- 1. 物理過濾：中和符號雜質 ---
-    # 先把 LaTeX 的 $ 拿掉，再把斜線中譯為「除以」
+    # 物理過濾：中和符號雜質，把斜線變中文
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('/', '除以').replace('*', '乘以').replace('=', '等於')
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     
-    # --- 2. 曉臻召喚：確保身分證字號 100% 正確 ---
-    # 這裡的字串必須精確：zh-TW-HsiaoChenNeural
+    # 召喚曉臻 HsiaoChen
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
-    
     audio_data = b""
     async for chunk in communicate.stream():
-        if chunk["type"] == "audio": 
-            audio_data += chunk["data"]
-            
-    # --- 3. 能量轉換：iPad 適配格式 ---
+        if chunk["type"] == "audio": audio_data += chunk["data"]
+    
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
@@ -110,7 +73,7 @@ def get_pdf_page_image(pdf_path, page_index):
     doc.close()
     return img_data
 
-# --- 4. 72 頁熱血中二標題 (完整保留，一字不漏) ---
+# --- 4. 72 頁熱血中二標題 ---
 page_titles = {
     1: "【禁忌儀式：科學方法】", 2: "【因果變律：實驗安全】", 3: "【平衡律：測量與天平】", 4: "【煉金基礎：密度奧義】",
     5: "【煉金呼吸：大氣製備】", 6: "【本質界線：純物與混合】", 7: "【提純程序：過濾蒸發】", 8: "【溶解契約：飽和極限】",
@@ -135,14 +98,13 @@ page_titles = {
 # --- 5. 初始化 Session ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 通行證申請教學 ---
+# --- 6. 通行證 ---
 st.title("🥤 理化 AI 雞排珍奶實驗室 (助教版)")
-st.markdown("""<div class="guide-box"><b>📖 快速指南：</b>點擊 <a href="https://aistudio.google.com/app/apikey" target="_blank">AI Studio</a> 取得金鑰，<b>務必勾選兩次同意</b>後貼回下方。</div>""", unsafe_allow_html=True)
 user_key = st.text_input("🔑 通行證：", type="password")
 
 st.divider()
 
-# --- 7. 學生提問區 (移除欄位，防止溢位) ---
+# --- 7. 學生提問區 ---
 st.subheader("💬 提問專區")
 student_q = st.text_input("打字問助教：", placeholder="例如：莫耳數怎麼算？")
 uploaded_file = st.file_uploader("拍下題目截圖：", type=["jpg", "png", "jpeg"])
@@ -152,7 +114,6 @@ if (student_q or uploaded_file) and user_key:
         try:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            # 修正提問邏輯，防止錯誤
             parts = ["你是資深理化 AI 助教。用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
             if uploaded_file: parts.append(Image.open(uploaded_file))
             if student_q: parts.append(student_q)
@@ -162,7 +123,7 @@ if (student_q or uploaded_file) and user_key:
 
 st.divider()
 
-# --- 8. 五大門派雙選單 (100% 縮排對位版) ---
+# --- 8. 五大門派雙選單 ---
 st.subheader("📖 翻開講義學習")
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("第一步：選擇大章節", parts_list)
@@ -185,30 +146,31 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
         with st.spinner("正在調製波霸奶茶..."):
             try:
-                # A. 顯示講義截圖
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
                 st.image(page_img, caption=f"講義：{page_titles[target_page]}", use_column_width=True)
                 
-                # B. 上傳 PDF 供 AI 分析
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # C. 寫入 Prompt (這裡縮排已經校正，絕對不會突出來)
-                prompt_content = [file_obj, f"""
-                你是理化 AI 助教。詳細講解講義第 {target_page} 頁內容。
-                使用雞排配大杯珍奶解釋。
+                # --- API 6項提示鎖定 & 縮排校正 ---
+                prompt_content = [file_obj, f"""你是理化 AI 助教。詳細講解講義第 {target_page} 頁內容。
+使用雞排配大杯珍奶解釋。
+【語音優化 6 項指令】：
+1. 公式顯示用 LaTeX。但口播台詞嚴禁出現「/」、「斜線」或「Slash」。
+2. 看到 n=m/M，台詞必須寫成：「莫耳數等於質量除以分子量」。
+3. 嚴禁反問使用者任何問題。
+4. 看到符號請直接稱呼物理意義（如 n 叫莫耳數，m 叫質量）。
+5. 口吻必須熱血且充滿科學狂熱。
+6. 結尾帥氣大喊：「這就是理化的真理！」"""]
 
-                【語音優化協議】：
-                1. 看到公式 n=m/M，台詞請寫成：「莫耳數等於質量除以分子量」。
-                2. 絕對禁唸「斜線」或「Slash」，一律轉化為中文。
-                3. 公式顯示用 LaTeX，但台詞要純口語。
-                4. 結尾帥氣大喊：「這就是真理！」
-                """]
-                # D. 生成劇本與語音
                 res = model.generate_content(prompt_content)
                 st.markdown(res.text)
                 st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
                 st.balloons()
-                
             except Exception as e:
                 st.error(f"導讀失敗：{e}")
+
+if st.session_state.audio_html:
+    st.markdown("---")
+    st.info("🔊 **平板提醒**：點擊下方播放鈕聽導讀。")
+    st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
