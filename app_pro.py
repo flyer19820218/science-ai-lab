@@ -82,18 +82,22 @@ st.markdown("""
 
 # --- 2. 核心助教語音 (iPad 專用 Base64 強效方案) ---
 async def generate_voice_base64(text):
-    # --- 語音轉譯協議：將符號轉為中文口語 ---
-    clean_text = re.sub(r'\$+', '', text) # 移除 LaTeX 符號
-    # 進行符號轉譯
+    # --- 1. 物理過濾：中和符號雜質 ---
+    # 先把 LaTeX 的 $ 拿掉，再把斜線中譯為「除以」
+    clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('/', '除以').replace('*', '乘以').replace('=', '等於')
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
-    # 針對公式的特殊修正
-    clean_text = clean_text.replace(' n ', ' 莫耳數 n ').replace(' m ', ' 質量 m ').replace(' M ', ' 分子量 M ')
     
+    # --- 2. 曉臻召喚：確保身分證字號 100% 正確 ---
+    # 這裡的字串必須精確：zh-TW-HsiaoChenNeural
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
+    
     audio_data = b""
     async for chunk in communicate.stream():
-        if chunk["type"] == "audio": audio_data += chunk["data"]
+        if chunk["type"] == "audio": 
+            audio_data += chunk["data"]
+            
+    # --- 3. 能量轉換：iPad 適配格式 ---
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
