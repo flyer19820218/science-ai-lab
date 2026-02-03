@@ -19,7 +19,7 @@ st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .stMain {
         background-color: #ffffff !important;
     }
     html, body, .stMarkdown, p, span, label, li {
@@ -48,9 +48,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 曉臻語音引擎 (純淨播音模式) ---
+# --- 2. 曉臻語音引擎 (純淨播音模式：曉臻只讀中文字) ---
 async def generate_voice_base64(text):
-    # 只保留中文字與基本標點，徹底清除所有代碼殘留
+    # 徹底清除劇本中可能殘留的標籤或符號
     clean_text = re.sub(r'[^\w\u4e00-\u9fff\d，。！？「」]', '', text)
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
@@ -90,85 +90,112 @@ page_titles = {
     69: "【磁魂覺醒：右手定則】", 70: "【勞倫茲怒：開掌定則】", 71: "【旋轉輪迴：直流電動機】", 72: "【發電機覺醒：冷次定律】"
 }
 
-# --- 5. 初始化 ---
+# --- 5. 初始化 Session ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
+if 'qa_audio_html' not in st.session_state: st.session_state.qa_audio_html = None
 
-# --- 6. API 通行指南 ---
+# --- 6. 核心 API 通行指南 (曉臻調製珍奶版) ---
 st.title("🚀 理化 AI 雞排珍奶實驗室 (曉臻助教版)")
-st.markdown("""<div class="guide-box"><b>📖 學生快速通行指南：</b><br>1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 獲取金鑰。<br>2. 貼回下方並按 Enter，開啟曉臻助教的沉浸式教學。</div>""", unsafe_allow_html=True)
+st.markdown("""
+<div class="guide-box">
+    <b>📖 學生快速通行指南：</b><br>
+    1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>。<br>
+    2. 點擊 <b>Create API key</b>。<br>
+    3. <b>重要：務必勾選兩次同意服務條款</b>。<br>
+    4. 複製產出的金鑰代碼。<br>
+    5. 貼回下方「通行證」欄位。<br>
+    6. 按 Enter 啟動，曉臻正在幫您調製波霸珍奶！
+</div>
+""", unsafe_allow_html=True)
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
 st.divider()
 
-# --- 7. 學生問問題區 ---
+# --- 7. 學生問問題區 (新增曉臻講解功能) ---
 st.subheader("💬 學生問問題區")
-student_q = st.text_input("打字問曉臻：", placeholder="例如：比熱怎麼算？")
+student_q = st.text_input("打字問曉臻：", placeholder="例如：為什麼水加熱會沸騰？")
 uploaded_file = st.file_uploader("📸 照片區：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
-    with st.spinner("正在調製波霸奶茶..."):
+    with st.spinner("曉臻正在分析問題並調製珍奶..."):
         try:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
-            parts = ["你是助教曉臻。用雞排配珍奶解釋。公式使用 LaTeX。"]
+            
+            prompt_qa = f"""你是助教曉臻。請針對學生的問題給予解答。
+請將回答分為兩部分，並用標籤分隔：
+【視覺解答】：給學生看的 Markdown 解答。像以前一樣用自然流暢的口氣解釋，不要只是條列。公式用 LaTeX。
+【語音劇本】：曉臻要唸出來的口語，劇本不呈現。公式唸成中文，不唸斜線。熱血且狂熱。
+
+學生問題：{student_q}"""
+            
+            parts = [prompt_qa]
             if uploaded_file: parts.append(Image.open(uploaded_file))
-            if student_q: parts.append(student_q)
             res = model.generate_content(parts)
-            st.info(f"💡 曉臻解答：\n\n{res.text}")
+            
+            # 雙軌分離
+            full_qa = res.text
+            display_qa = full_qa.split("【語音劇本】")[0].replace("【視覺解答】", "").strip()
+            voice_qa = full_qa.split("【語音劇本】")[-1].strip() if "【語音劇本】" in full_qa else display_qa
+            
+            st.info(f"💡 曉臻解答：\n\n{display_qa}")
+            # 曉臻講解 (隱藏劇本)
+            st.session_state.qa_audio_html = asyncio.run(generate_voice_base64(voice_qa))
+            
         except Exception as e: st.error(f"思考失敗：{e}")
+
+if st.session_state.qa_audio_html:
+    st.markdown(st.session_state.qa_audio_html, unsafe_allow_html=True)
 
 st.divider()
 
 # --- 8. 五大門派選單 ---
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
-part_choice = st.selectbox("大章節", parts_list)
+part_choice = st.selectbox("大章節選擇", parts_list)
 r = range(1, 16) if "一" in part_choice else range(16, 27) if "二" in part_choice else range(27, 41) if "三" in part_choice else range(41, 55) if "四" in part_choice else range(55, 73)
 options = [f"第 {p} 頁：{page_titles.get(p, '單元')}" for p in r]
 selected_page_str = st.selectbox("精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-# --- 9. 啟動導讀 (雙軌：聲畫分離協定) ---
+# --- 9. 啟動導讀 (雙軌：聲畫分離) ---
 if st.button(f"🚀 啟動【第 {target_page} 頁】沉浸式導讀"):
     if not user_key: st.warning("請先輸入金鑰。")
     else:
         genai.configure(api_key=user_key)
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        with st.spinner("曉臻正在純化劇本..."):
+        with st.spinner("曉臻正在純化劇本與準備珍珠..."):
             try:
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
                 st.image(page_img, use_column_width=True)
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # --- 🎯 雙軌 Prompt：將視覺與聽覺完全拆分 ---
-                prompt_content = [file_obj, f"""你是資深理化助教曉臻。講解第 {target_page} 頁。
+                prompt_lecture = f"""你是助教曉臻。講解第 {target_page} 頁。
 
 請將回答嚴格分為兩部分，並用標籤分隔：
-【視覺內容】：給學生看著講義聽課用的 Markdown 筆記。公式請用 LaTeX 寫得漂亮。
-【聽覺劇本】：曉臻要唸出來的口語。請將所有公式轉換為老師上課唸的中文字。
+【視覺內容】：畫面上顯示的 Markdown 教學，像以前一樣用口語化的方式解釋概念，公式用 LaTeX。不要只有條列。
+【語音劇本】：曉臻要唸的內容（絕對不呈現）。公式轉換為中文播音格式，絕不唸斜線。充滿馬斯克的科學狂熱。
 
-聽覺劇本 6 指令：
-1. 嚴禁出現符號、斜線或 LaTeX。
-2. n=m/M 唸作「莫耳數等於質量除以分子量」。
-3. 語氣熱血狂熱，像馬斯克在上課。
-4. 絕對不准反問學生問題。
-5. 變數一律稱呼物理意義（如 n 是莫耳數）。
-6. 結尾大喊：「這就是理化的真理！」"""]
+指令：
+1. n=m/M 唸作「莫耳數等於質量除以分子量」。
+2. 語氣熱血狂熱。
+3. 不反問。
+4. 結尾喊：「這就是理化的真理！」"""
 
-                res = model.generate_content(prompt_content)
-                full_text = res.text
+                res = model.generate_content([file_obj, prompt_lecture])
+                full_lecture = res.text
                 
                 # 執行雙軌拆分
-                display_part = full_text.split("【聽覺劇本】")[0].replace("【視覺內容】", "").strip()
-                audio_part = full_text.split("【聽覺劇本】")[-1].strip() if "【聽覺劇本】" in full_text else display_part
+                display_lecture = full_lecture.split("【語音劇本】")[0].replace("【視覺內容】", "").strip()
+                voice_lecture = full_lecture.split("【語音劇本】")[-1].strip() if "【語音劇本】" in full_lecture else display_lecture
                 
-                # 畫面上只顯示【視覺內容】
-                st.markdown(display_part)
-                # 曉臻只唸【聽覺劇本】，且文字不顯示在畫面上
-                st.session_state.audio_html = asyncio.run(generate_voice_base64(audio_part))
+                # 畫面上顯示視覺內容
+                st.markdown(display_lecture)
+                # 曉臻只唸語音劇本，文字不顯示
+                st.session_state.audio_html = asyncio.run(generate_voice_base64(voice_lecture))
                 st.balloons()
             except Exception as e: st.error(f"異常：{e}")
 
 if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **曉臻助教正在口播真理...**")
+    st.info("🔊 **曉臻助教導讀中**")
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
