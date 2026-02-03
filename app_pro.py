@@ -82,8 +82,15 @@ st.markdown("""
 
 # --- 2. 核心助教語音 (iPad 專用 Base64 強效方案) ---
 async def generate_voice_base64(text):
-    clean_text = re.sub(r'\$+', '', text).replace('\\%', '百分之').replace('%', '百分之')
-    communicate = edge_tts.Communicate(clean_text, "zh-TW-YunxiNeural", rate="-2%")
+    # --- 語音轉譯協議：將符號轉為中文口語 ---
+    clean_text = re.sub(r'\$+', '', text) # 移除 LaTeX 符號
+    # 進行符號轉譯
+    clean_text = clean_text.replace('/', '除以').replace('*', '乘以').replace('=', '等於')
+    clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
+    # 針對公式的特殊修正
+    clean_text = clean_text.replace(' n ', ' 莫耳數 n ').replace(' m ', ' 質量 m ').replace(' M ', ' 分子量 M ')
+    
+    communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
         if chunk["type"] == "audio": audio_data += chunk["data"]
@@ -151,7 +158,7 @@ if (student_q or uploaded_file) and user_key:
 
 st.divider()
 
-# --- 8. 五大門派雙選單 ---
+# --- 8. 五大門派雙選單 (100% 縮排對位版) ---
 st.subheader("📖 翻開講義學習")
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("第一步：選擇大章節", parts_list)
@@ -174,18 +181,30 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
         with st.spinner("正在調製波霸奶茶..."):
             try:
+                # A. 顯示講義截圖
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
                 st.image(page_img, caption=f"講義：{page_titles[target_page]}", use_column_width=True)
+                
+                # B. 上傳 PDF 供 AI 分析
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
-                prompt = [file_obj, f"你是理化 AI 助教。詳細講解講義第 {target_page} 頁。用雞排配大杯珍奶開場。公式必須 LaTeX。不准出測驗。"]
-                res = model.generate_content(prompt)
+                
+                # C. 寫入 Prompt (這裡縮排已經校正，絕對不會突出來)
+                prompt_content = [file_obj, f"""
+                你是理化 AI 助教。詳細講解講義第 {target_page} 頁內容。
+                使用雞排配大杯珍奶解釋。
+
+                【語音優化協議】：
+                1. 看到公式 n=m/M，台詞請寫成：「莫耳數等於質量除以分子量」。
+                2. 絕對禁唸「斜線」或「Slash」，一律轉化為中文。
+                3. 公式顯示用 LaTeX，但台詞要純口語。
+                4. 結尾帥氣大喊：「這就是真理！」
+                """]
+                # D. 生成劇本與語音
+                res = model.generate_content(prompt_content)
                 st.markdown(res.text)
                 st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
                 st.balloons()
-            except Exception as e: st.error(f"導讀失敗：{e}")
-
-if st.session_state.audio_html:
-    st.markdown("---")
-    st.info("🔊 **平板提醒**：點擊下方播放鈕聽導讀。")
-    st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"導讀失敗：{e}")
