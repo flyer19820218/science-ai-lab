@@ -11,29 +11,22 @@ from PIL import Image
 try:
     import fitz
 except ImportError:
-    st.error("❌ 偵測到零件缺失！請確保 GitHub 中有 requirements.txt 並包含 pymupdf。")
+    st.error("❌ 偵測到零件缺失！請確保環境中已安裝 pymupdf。")
     st.stop()
 
-# --- 1. 頁面配置 (全能適配 + 深度白晝協議) ---
+# --- 1. 介面配置 (極簡白晝協議：為老師與學生設計的清晰視覺) ---
 st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
-        background-color: #ffffff !important;
-    }
+    .stApp { background-color: #ffffff !important; }
     html, body, [class*="css"], .stMarkdown, p, span, label, li {
         color: #000000 !important;
-        font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', 'Heiti TC', 'Microsoft JhengHei', sans-serif !important;
+        font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', sans-serif !important;
     }
-    div[data-baseweb="popover"], div[data-baseweb="listbox"], ul[role="listbox"], li[role="option"] {
+    div[data-testid="stTextInput"] input, div[data-baseweb="select"] {
         background-color: #ffffff !important;
         color: #000000 !important;
-    }
-    div[data-testid="stTextInput"] input, div[data-baseweb="select"], div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
         border: 2px solid #000000 !important;
     }
     div.stButton > button {
@@ -41,21 +34,21 @@ st.markdown("""
         color: #000000 !important;
         border: 2px solid #01579b !important;
         border-radius: 12px !important;
-        width: 100% !important;
         height: 3.5rem !important;
+        width: 100% !important;
     }
     .katex { color: #000000 !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 核心助教語音 (曉臻 100% 正確版) ---
+# --- 2. 核心語音引擎 (曉臻 HsiaoChen：會說數學公式的助教) ---
 async def generate_voice_base64(text):
-    # 物理過濾：中和符號雜質，把斜線變中文
+    # 【公式轉譯協議】：將符號中性化，防止曉臻唸出「斜線」
     clean_text = re.sub(r'\$+', '', text)
     clean_text = clean_text.replace('/', '除以').replace('*', '乘以').replace('=', '等於')
     clean_text = clean_text.replace('\\%', '百分之').replace('%', '百分之')
     
-    # 召喚曉臻 HsiaoChen
+    # 召喚曉臻 (HsiaoChenNeural)
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -64,7 +57,7 @@ async def generate_voice_base64(text):
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
-# --- 3. 雲端截圖功能 ---
+# --- 3. 圖片提取功能 ---
 def get_pdf_page_image(pdf_path, page_index):
     doc = fitz.open(pdf_path)
     page = doc.load_page(page_index)
@@ -73,7 +66,7 @@ def get_pdf_page_image(pdf_path, page_index):
     doc.close()
     return img_data
 
-# --- 4. 72 頁熱血中二標題 ---
+# --- 4. 72 頁熱血標題地圖 (完整保留) ---
 page_titles = {
     1: "【禁忌儀式：科學方法】", 2: "【因果變律：實驗安全】", 3: "【平衡律：測量與天平】", 4: "【煉金基礎：密度奧義】",
     5: "【煉金呼吸：大氣製備】", 6: "【本質界線：純物與混合】", 7: "【提純程序：過濾蒸發】", 8: "【溶解契約：飽和極限】",
@@ -95,36 +88,16 @@ page_titles = {
     69: "【磁魂覺醒：右手定則】", 70: "【勞倫茲怒：開掌定則】", 71: "【旋轉輪迴：直流電動機】", 72: "【發電機覺醒：冷次定律】"
 }
 
-# --- 5. 初始化 Session ---
+# --- 5. Session 初始化 ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 
-# --- 6. 通行證 ---
+# --- 6. 介面主體 ---
 st.title("🥤 理化 AI 雞排珍奶實驗室 (助教版)")
-user_key = st.text_input("🔑 通行證：", type="password")
+user_key = st.text_input("🔑 請輸入通行證 (API KEY)：", type="password")
 
 st.divider()
 
-# --- 7. 學生提問區 ---
-st.subheader("💬 提問專區")
-student_q = st.text_input("打字問助教：", placeholder="例如：莫耳數怎麼算？")
-uploaded_file = st.file_uploader("拍下題目截圖：", type=["jpg", "png", "jpeg"])
-
-if (student_q or uploaded_file) and user_key:
-    with st.spinner("正在調製波霸奶茶..."):
-        try:
-            genai.configure(api_key=user_key)
-            model = genai.GenerativeModel('models/gemini-2.5-flash')
-            parts = ["你是資深理化 AI 助教。用雞排配大杯珍奶解釋。公式使用 LaTeX。"]
-            if uploaded_file: parts.append(Image.open(uploaded_file))
-            if student_q: parts.append(student_q)
-            res = model.generate_content(parts)
-            st.info(f"💡 助教解答：\n\n{res.text}")
-        except Exception as e: st.error(f"思考失敗：{e}")
-
-st.divider()
-
-# --- 8. 五大門派雙選單 ---
-st.subheader("📖 翻開講義學習")
+# --- 7. 五大門派選單 ---
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("第一步：選擇大章節", parts_list)
 
@@ -138,7 +111,8 @@ options = [f"第 {p} 頁：{page_titles.get(p, '單元重點')}" for p in r]
 selected_page_str = st.selectbox("第二步：精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
+# --- 8. 點火發射區 ---
+if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
     if not user_key:
         st.warning("請先輸入金鑰。")
     else:
@@ -146,13 +120,15 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
         path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
         with st.spinner("正在調製波霸奶茶..."):
             try:
+                # A. 顯示講義截圖
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
                 st.image(page_img, caption=f"講義：{page_titles[target_page]}", use_column_width=True)
                 
+                # B. 上傳並分析
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # --- API 6項提示鎖定 & 縮排校正 ---
+                # C. 🎯 API 核心 6 項提示 (精確切齊，絕不突出)
                 prompt_content = [file_obj, f"""你是理化 AI 助教。詳細講解講義第 {target_page} 頁內容。
 使用雞排配大杯珍奶解釋。
 【語音優化 6 項指令】：
@@ -163,14 +139,16 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】導讀"):
 5. 口吻必須熱血且充滿科學狂熱。
 6. 結尾帥氣大喊：「這就是理化的真理！」"""]
 
+                # D. 生成劇本與語音
                 res = model.generate_content(prompt_content)
                 st.markdown(res.text)
                 st.session_state.audio_html = asyncio.run(generate_voice_base64(res.text))
                 st.balloons()
             except Exception as e:
-                st.error(f"導讀失敗：{e}")
+                st.error(f"實驗異常：{e}")
 
+# --- 9. 語音播放區 ---
 if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **平板提醒**：點擊下方播放鈕聽導讀。")
+    st.info("🔊 **曉臻老師導讀中**：")
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
