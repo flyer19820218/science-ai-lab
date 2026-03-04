@@ -14,7 +14,33 @@ except ImportError:
     st.error("❌ 零件缺失！請確保已安裝 pymupdf。")
     st.stop()
 
-# --- 1. 頁面配置 (蘋果/平板雙模適配：深度白晝協議) ---
+# ==========================================
+# 🧠 核心大腦：曉臻老師專屬 Prompt 腳本設定區
+# ==========================================
+# 您可以隨時在這裡修改曉臻的上課風格、四段式內容，以及發音修正。
+
+PROMPT_TEMPLATE = """
+你是「理化實驗室」的專屬導讀助教曉臻。你熱愛馬拉松（半馬 PB 92 分），語速穩定、語調溫和，充滿科學熱情。
+請針對這份講義的【第 {target_page} 頁】進行教學導讀。
+
+【視覺與聽覺雙軌協議】（嚴格執行）
+請將你的回答分為兩個部分，並用標籤隔開：
+1. 【視覺內容】：畫面上給學生看的 Markdown 解答。排版清晰，重點字可加粗。所有的數學與化學公式必須嚴格使用 LaTeX 包覆（如 $$n = \\frac{{m}}{{M}}$$ 或 $2H_2O_2 \\rightarrow 2H_2O + O_2$）。
+2. 【聽覺劇本】：曉臻要唸出來的隱藏劇本。
+   - 劇本長度必須與視覺內容相等甚至更長，細節要多。
+   - 【特殊發音修正】：劇本中「嚴禁」出現數學符號與英文代號。看到 1ppm 必須寫成「百萬分之一」；看到 n=m/M 必須寫成「莫耳數等於質量除以分子量」；遇到 M 必須唸作「體積莫耳濃度」；遇到雙氧水化學式請直接寫「雙氧水」。
+   - 解釋「莫耳」概念時，請優先使用「手搖飲珍珠」的邏輯來比喻。
+
+【教學產線四大流程】（請在視覺與聽覺中都呈現這四個段落的對應內容）
+(1) 10秒課前熱身：隨機產出 30 秒運動健康或賽事內容（如 NBA、棒球經典賽、拉筋、剛跑完步的心得），並提到「現炸大雞排」配「波霸奶茶」舒緩學生壓力。劇本開頭必喊：『各位同學，請翻到第 {target_page} 頁。』
+(2) 重點整理詳細解析：用自然段落解釋畫面上的核心觀念與圖表。拒絕唸出圖片的排版描述（如顏色、字體、背景）。
+(3) 題目講解：若頁面中有練習題，請詳細講解。若難度較高，請啟動「分段配速解說」，引導學生將前面概念與習題串連，確保每個同學都能跟上這場科學馬拉松。若無題目則總結觀念。
+(4) 常考重點與易錯提醒：點出大考常考重點，以及學長姐最常犯的錯誤（避坑指南）。結尾必含句：「開課前拉拉筋，老師跑完馬拉松才來的，大家加油！」或「熱身一下上完課老師就要去慢跑囉」。
+"""
+
+# ==========================================
+# 🎨 1. 頁面配置 (蘋果/平板雙模適配：深度白晝協議)
+# ==========================================
 st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
 
 st.markdown("""
@@ -26,7 +52,7 @@ st.markdown("""
     html, body, .stMarkdown, p, span, label, li {
         color: #000000 !important;
         font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', sans-serif !important;
-        font-size: calc(1rem + 0.3vw) !important; /* 平板手機雙模字體縮放 */
+        font-size: calc(1rem + 0.3vw) !important;
     }
 
     /* 蘋果手機/平板 Selectbox 黑底與反黑修正 */
@@ -38,17 +64,11 @@ st.markdown("""
         -webkit-text-fill-color: #000000 !important; border: 2px solid #000000 !important;
     }
 
-    /* 📸 照片區 Browse 鈕中文化與配色修正 */
-    [data-testid="stFileUploader"] section { 
-        background-color: #ffffff !important; border: 2px dashed #01579b !important; 
-    }
-    [data-testid="stFileUploader"] button { 
-        background-color: #e3f2fd !important; color: #000000 !important; border: 1px solid #01579b !important;
-    }
+    /* 📸 照片區中文化與配色修正 */
+    [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 2px dashed #01579b !important; }
+    [data-testid="stFileUploader"] button { background-color: #e3f2fd !important; color: #000000 !important; border: 1px solid #01579b !important; }
     [data-testid="stFileUploader"] button div span { font-size: 0 !important; }
-    [data-testid="stFileUploader"] button div span::before { 
-        content: "瀏覽檔案 (選取題目)" !important; font-size: 1rem !important; color: #000000 !important;
-    }
+    [data-testid="stFileUploader"] button div span::before { content: "瀏覽檔案 (選取題目)" !important; font-size: 1rem !important; color: #000000 !important; }
 
     /* 按鈕適配 */
     div.stButton > button {
@@ -68,10 +88,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. 曉臻語音引擎 (純化播音) ---
+# ==========================================
+# 🎙️ 2. 曉臻語音引擎 (純化播音)
+# ==========================================
 async def generate_voice_base64(text):
-    # 清除劇本中殘留的符號，讓曉臻只唸翻譯好的中文字
-    clean_text = re.sub(r'[^\w\u4e00-\u9fff\d，。！？「」]', '', text)
+    # 清除 Markdown 與特殊符號，確保只唸中文字與標點
+    clean_text = re.sub(r'[^\w\u4e00-\u9fff\d，。！？「」、：]', '', text)
     communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
     audio_data = b""
     async for chunk in communicate.stream():
@@ -79,7 +101,9 @@ async def generate_voice_base64(text):
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
-# --- 3. 圖片功能 ---
+# ==========================================
+# 🖼️ 3. 圖片處理功能
+# ==========================================
 def get_pdf_page_image(pdf_path, page_index):
     doc = fitz.open(pdf_path)
     page = doc.load_page(page_index)
@@ -88,7 +112,9 @@ def get_pdf_page_image(pdf_path, page_index):
     doc.close()
     return img_data
 
-# --- 4. 72 頁熱血標題 ---
+# ==========================================
+# 📚 4. 72 頁熱血標題字典 (不變)
+# ==========================================
 page_titles = {
     1: "【禁忌儀式：科學方法】", 2: "【因果變律：實驗安全】", 3: "【平衡律：測量與天平】", 4: "【煉金基礎：密度奧義】",
     5: "【煉金呼吸：大氣製備】", 6: "【本質界線：純物與混合】", 7: "【提純程序：過濾蒸發】", 8: "【溶解契約：飽和極限】",
@@ -110,28 +136,27 @@ page_titles = {
     69: "【磁魂覺醒：右手定則】", 70: "【勞倫茲怒：開掌定則】", 71: "【旋轉輪迴：直流電動機】", 72: "【發電機覺醒：冷次定律】"
 }
 
-# --- 5. Session ---
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
 if 'qa_audio_html' not in st.session_state: st.session_state.qa_audio_html = None
 
-# --- 6. API 通行指南 (完整 6 項) ---
+# ==========================================
+# 🔑 5. UI 與 API 驗證
+# ==========================================
 st.title("🚀 理化 AI 雞排珍奶實驗室 (曉臻助教版)")
 st.markdown("""
 <div class="guide-box">
     <b>📖 學生快速通行指南：</b><br>
     1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>。<br>
     2. 點擊 <b>Create API key</b> 產出專屬通行證。<br>
-    3. <b>務必勾選兩次同意條款</b>，否則無法啟動反應爐。<br>
-    4. 複製那一串英文數字代碼。<br>
-    5. 貼回下方「通行證」欄位按 Enter。<br>
-    6. 曉臻會開始幫您調製波霸珍奶與準備講義！
+    3. 貼回下方「通行證」欄位按 Enter 啟動反應爐。
 </div>
 """, unsafe_allow_html=True)
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
-
 st.divider()
 
-# --- 7. 學生問問題區 ---
+# ==========================================
+# 💬 6. 學生問答區 (同樣套用雙軌與熱身風格)
+# ==========================================
 st.subheader("💬 學生問問題區")
 student_q = st.text_input("打字問曉臻：", placeholder="例如：1ppm 是什麼意思？")
 uploaded_file = st.file_uploader("📸 照片區：", type=["jpg", "png", "jpeg"])
@@ -142,18 +167,17 @@ if (student_q or uploaded_file) and user_key:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
             
-            prompt_qa = f"""你是助教曉臻。請解答學生的理化問題。
-請分為兩部分（用標籤隔開）：
-【視覺內容】：畫面上給學生看的 Markdown 解答。口語、流暢。公式用 LaTeX。
-【聽覺劇本】：曉臻要唸的內容（絕對不呈現）。公式必須翻譯成中文唸法（如 1ppm 寫作百萬分之一，不要出現符號）。劇本長度必須與視覺內容相等甚至更長，細節要多。
-
-問題：{student_q}"""
+            # 問答區專用 Prompt
+            prompt_qa = f"""{PROMPT_TEMPLATE}
+            
+            這是學生的提問內容，請依照上述【四段式產出】與【雙軌協議】為他解答：
+            學生的問題：{student_q}
+            """
             
             parts = [prompt_qa]
             if uploaded_file: parts.append(Image.open(uploaded_file))
             res = model.generate_content(parts)
             
-            # 雙軌分離
             full_qa = res.text
             display_qa = full_qa.split("【聽覺劇本】")[0].replace("【視覺內容】", "").strip()
             voice_qa = full_qa.split("【聽覺劇本】")[-1].strip() if "【聽覺劇本】" in full_qa else display_qa
@@ -164,10 +188,12 @@ if (student_q or uploaded_file) and user_key:
 
 if st.session_state.qa_audio_html:
     st.markdown(st.session_state.qa_audio_html, unsafe_allow_html=True)
-
 st.divider()
 
-# --- 8. 五大門派選單 ---
+# ==========================================
+# 📖 7. 課程選單與導讀啟動
+# ==========================================
+st.subheader("📖 啟動導讀：選擇單元")
 parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
 part_choice = st.selectbox("大章節", parts_list)
 r = range(1, 16) if "一" in part_choice else range(16, 27) if "二" in part_choice else range(27, 41) if "三" in part_choice else range(41, 55) if "四" in part_choice else range(55, 73)
@@ -175,7 +201,6 @@ options = [f"第 {p} 頁：{page_titles.get(p, '單元')} " for p in r]
 selected_page_str = st.selectbox("精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-# --- 9. 啟動導讀 (雙軌：聲畫分離) ---
 if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
     if not user_key: st.warning("請先輸入金鑰。")
     else:
@@ -188,22 +213,13 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # --- 🎯 雙軌 Prompt：強制翻譯數學符號 ---
-                prompt_lecture = f"""你是資深理化助教曉臻。現在要講解第 {target_page} 頁。
-
-【備課模式】：
-1. 開場務必先聊一下「現炸大雞排」配「波霸奶茶」有多香，舒緩學生壓力。
-2. 語氣像熱血馬斯克，充滿科學狂熱。
-3. 把回答分為兩部分，標籤分隔。
-
-【視覺內容】：畫面上顯示的 Markdown 解說。像資深老師上課一樣，用自然段落解釋，不要只有條列。公式用 LaTeX。
-【聽覺劇本】：曉臻要唸的隱形劇本。
-   * 指令：劇本長度必須大於等於視覺內容，細節要講清楚。
-   * 指令：公式「嚴禁」出現符號。看到 1ppm 必須寫成「百萬分之一」；看到 n=m/M 必須寫成「莫耳數等於質量除以分子量」。
-   * 指令：結尾喊「這就是理化的真理！」"""
-
-                res = model.generate_content([file_obj, prompt_lecture])
+                # 直接注入剛剛寫好的核心 PROMPT_TEMPLATE
+                final_prompt = PROMPT_TEMPLATE.format(target_page=target_page)
+                
+                res = model.generate_content([file_obj, final_prompt])
                 full_lecture = res.text
+                
+                # 雙軌切割
                 display_lecture = full_lecture.split("【聽覺劇本】")[0].replace("【視覺內容】", "").strip()
                 voice_lecture = full_lecture.split("【聽覺劇本】")[-1].strip() if "【聽覺劇本】" in full_lecture else display_lecture
                 
