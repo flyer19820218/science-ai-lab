@@ -3,85 +3,91 @@ import google.generativeai as genai
 import os
 import asyncio
 import edge_tts
+import fitz  # 雲端自動截圖
 import re
 import base64
 from PIL import Image
 
-# --- 零件檢查 ---
-try:
-    import fitz
-except ImportError:
-    st.error("❌ 零件缺失！請確保已安裝 pymupdf。")
-    st.stop()
-
 # ==========================================
-# 🧠 核心大腦：曉臻老師專屬 Prompt 腳本設定區
+# 🧠 核心大腦：生物助教專屬 Prompt 腳本設定區
 # ==========================================
-# 您可以隨時在這裡修改曉臻的上課風格、四段式內容，以及發音修正。
+# 在這裡統一控制「生命真理研究室」的四段式教學與專有名詞發音。
 
-PROMPT_TEMPLATE = """
-你是「理化實驗室」的專屬導讀助教曉臻。你熱愛馬拉松（半馬 PB 92 分），語速穩定、語調溫和，充滿科學熱情。
-請針對這份講義的【第 {target_page} 頁】進行教學導讀。
+SYSTEM_PROMPT_TEMPLATE = """
+你是「生命真理研究室」的資深生物 AI 助教。你講話生活化、幽默，最愛邊喝「大杯波霸奶茶」配「現炸大雞排」邊備課。
+請針對這份生物講義的【第 {target_page} 頁】進行教學導讀。
 
 【視覺與聽覺雙軌協議】（嚴格執行）
 請將你的回答分為兩個部分，並用標籤隔開：
-1. 【視覺內容】：畫面上給學生看的 Markdown 解答。排版清晰，重點字可加粗。所有的數學與化學公式必須嚴格使用 LaTeX 包覆（如 $$n = \\frac{{m}}{{M}}$$ 或 $2H_2O_2 \\rightarrow 2H_2O + O_2$）。
-2. 【聽覺劇本】：曉臻要唸出來的隱藏劇本。
-   - 劇本長度必須與視覺內容相等甚至更長，細節要多。
-   - 【特殊發音修正】：劇本中「嚴禁」出現數學符號與英文代號。看到 1ppm 必須寫成「百萬分之一」；看到 n=m/M 必須寫成「莫耳數等於質量除以分子量」；遇到 M 必須唸作「體積莫耳濃度」；遇到雙氧水化學式請直接寫「雙氧水」。
-   - 解釋「莫耳」概念時，請優先使用「手搖飲珍珠」的邏輯來比喻。
+1. 【視覺內容】：畫面上給學生看的 Markdown 解答。排版清晰，重點字可加粗。所有的化學式與專有名詞若需標註請嚴格使用 LaTeX 包覆（如 $$C_6H_{12}O_6$$）。
+2. 【聽覺劇本】：助教要唸出來的隱藏劇本。
+   - 劇本長度必須與視覺內容相等甚至更長，細節要講清楚。
+   - 【特殊發音修正】：劇本中「嚴禁」出現化學符號。看到 $$C_6H_{12}O_6$$ 必須直接寫成並唸作「葡萄糖」；看到 DNA 寫作「低恩A」或「D N A」；遇到 ATP 寫作「A T P」。確保語音引擎能順利朗讀。
 
 【教學產線四大流程】（請在視覺與聽覺中都呈現這四個段落的對應內容）
-(1) 10秒課前熱身：隨機產出 30 秒運動健康或賽事內容（如 NBA、棒球經典賽、拉筋、剛跑完步的心得），並提到「現炸大雞排」配「波霸奶茶」舒緩學生壓力。劇本開頭必喊：『各位同學，請翻到第 {target_page} 頁。』
-(2) 重點整理詳細解析：用自然段落解釋畫面上的核心觀念與圖表。拒絕唸出圖片的排版描述（如顏色、字體、背景）。
-(3) 題目講解：若頁面中有練習題，請詳細講解。若難度較高，請啟動「分段配速解說」，引導學生將前面概念與習題串連，確保每個同學都能跟上這場科學馬拉松。若無題目則總結觀念。
-(4) 常考重點與易錯提醒：點出大考常考重點，以及學長姐最常犯的錯誤（避坑指南）。結尾必含句：「開課前拉拉筋，老師跑完馬拉松才來的，大家加油！」或「熱身一下上完課老師就要去慢跑囉」。
+(1) 10秒課前熱身：開場白一定要很生活化，提到「現炸大雞排」配「波霸奶茶」，並跟同學打招呼（可以提到最近備課講太多話，聲音有點沙啞，拉近距離）。劇本開頭必喊：『各位同學，請翻開講義第 {target_page} 頁。』
+(2) 重點整理詳細解析：用自然段落解釋畫面上的圖表與核心觀念。生物科圖表非常多，請「務必」把圖表代表的生命現象與意義說清楚。拒絕唸出圖片的純排版描述。
+(3) 題目講解：若頁面中有練習題，請詳細講解每個選項為什麼對或錯（分段配速解說）。若該頁無題目，則帶領學生做該頁的重點觀念總結。
+(4) 常考重點與易錯提醒：點出會考/大考最愛考的重點，以及學長姐最常搞混的地方（例如：動植物細胞比對、光合作用變因、消化液作用等避坑指南）。結尾必含句：「喝口珍奶，我們準備進入下一個生命真理！」
 """
 
 # ==========================================
-# 🎨 1. 頁面配置 (蘋果/平板雙模適配：深度白晝協議)
+# 🎨 1. 頁面配置 (行動/平版雙模適配 + 深度白晝協議)
 # ==========================================
-st.set_page_config(page_title="理化 AI 雞排珍奶實驗室", layout="wide")
+st.set_page_config(page_title="生物 AI 生命真理研究室", layout="wide")
 
 st.markdown("""
     <style>
-    /* 全局白底黑字鎖定 */
-    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], .stMain {
+    /* 全域白晝協議 */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stToolbar"], .stMain {
         background-color: #ffffff !important;
     }
-    html, body, .stMarkdown, p, span, label, li {
+    html, body, [class*="css"], .stMarkdown, p, span, label, li {
         color: #000000 !important;
-        font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', sans-serif !important;
-        font-size: calc(1rem + 0.3vw) !important;
+        font-family: 'HanziPen SC', '翩翩體', 'PingFang TC', 'Heiti TC', 'Microsoft JhengHei', sans-serif !important;
     }
 
-    /* 蘋果手機/平板 Selectbox 黑底與反黑修正 */
+    /* 雙模適配 */
+    [data-testid="stAppViewBlockContainer"] { padding: 1.5rem 1rem !important; }
+    h1 { font-size: calc(1.4rem + 1.2vw) !important; text-align: center; }
+    h3 { font-size: calc(1.1rem + 0.5vw) !important; }
+
+    /* 下拉選單黑底修正 */
     div[data-baseweb="popover"], div[data-baseweb="listbox"], ul[role="listbox"], li[role="option"] {
         background-color: #ffffff !important; color: #000000 !important;
     }
+    li[role="option"] div, li[role="option"] span {
+        color: #000000 !important; background-color: #ffffff !important;
+    }
+
+    /* 組件鎖定 */
     div[data-testid="stTextInput"] input, div[data-baseweb="select"], div[data-baseweb="select"] > div {
         background-color: #ffffff !important; color: #000000 !important;
         -webkit-text-fill-color: #000000 !important; border: 2px solid #000000 !important;
     }
 
-    /* 📸 照片區中文化與配色修正 */
-    [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 2px dashed #01579b !important; }
-    [data-testid="stFileUploader"] button { background-color: #e3f2fd !important; color: #000000 !important; border: 1px solid #01579b !important; }
+    /* 拍照截圖區 */
+    [data-testid="stFileUploader"] section { background-color: #ffffff !important; border: 2px dashed #000000 !important; }
+    [data-testid="stFileUploader"] button { background-color: #ffffff !important; color: #000000 !important; border: 1px solid #000000 !important; }
     [data-testid="stFileUploader"] button div span { font-size: 0 !important; }
-    [data-testid="stFileUploader"] button div span::before { content: "瀏覽檔案 (選取題目)" !important; font-size: 1rem !important; color: #000000 !important; }
+    [data-testid="stFileUploader"] button div span::before { content: "瀏覽檔案" !important; font-size: 1rem !important; color: #000000 !important; }
 
-    /* 按鈕適配 */
-    div.stButton > button {
-        background-color: #e3f2fd !important; color: #000000 !important;
-        border: 2px solid #01579b !important; border-radius: 12px !important;
-        width: 100% !important; height: 3.5rem !important;
+    /* 生物專屬黃色導覽框 */
+    .guide-box {
+        background-color: #fff9c4 !important; color: #000000 !important;
+        padding: 15px; border-radius: 12px; border: 2px solid #fbc02d; margin-bottom: 20px;
     }
-    .guide-box { border: 2px dashed #01579b; padding: 1.2rem; border-radius: 12px; background-color: #f0f8ff; color: #000000; }
-    .katex { color: #000000 !important; }
 
-    /* 強制暗色模式失效 */
+    /* 按鈕行動優化 */
+    div.stButton > button {
+        background-color: #e1f5fe !important; color: #000000 !important;
+        border: 2px solid #01579b !important; border-radius: 12px !important;
+        width: 100% !important; height: 3.5rem !important; font-weight: bold !important;
+    }
+
+    .katex { color: #000000 !important; }
     @media (prefers-color-scheme: dark) {
-        .stApp, div[data-testid="stTextInput"] input, [data-testid="stFileUploader"] section {
+        .stApp, div[data-testid="stTextInput"] input, section[data-testid="stFileUploader"], [data-testid="stFileUploader"] button, div[data-baseweb="popover"] {
             background-color: #ffffff !important; color: #000000 !important;
         }
     }
@@ -89,51 +95,47 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # ==========================================
-# 🎙️ 2. 曉臻語音引擎 (純化播音)
+# 🎙️ 2. 核心助教語音 (iPad 專用 Base64 強效封裝)
 # ==========================================
 async def generate_voice_base64(text):
-    # 清除 Markdown 與特殊符號，確保只唸中文字與標點
+    # 生物語速較慢 (-3%)，並過濾特殊符號確保流暢
     clean_text = re.sub(r'[^\w\u4e00-\u9fff\d，。！？「」、：]', '', text)
-    communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-2%")
+    communicate = edge_tts.Communicate(clean_text, "zh-TW-HsiaoChenNeural", rate="-3%")
     audio_data = b""
     async for chunk in communicate.stream():
-        if chunk["type"] == "audio": audio_data += chunk["data"]
+        if chunk["type"] == "audio":
+            audio_data += chunk["data"]
     b64 = base64.b64encode(audio_data).decode()
     return f'<audio controls autoplay style="width:100%"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>'
 
 # ==========================================
-# 🖼️ 3. 圖片處理功能
+# 🖼️ 3. 雲端截圖功能
 # ==========================================
 def get_pdf_page_image(pdf_path, page_index):
     doc = fitz.open(pdf_path)
     page = doc.load_page(page_index)
-    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)) 
+    pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
     img_data = pix.tobytes("png")
     doc.close()
     return img_data
 
 # ==========================================
-# 📚 4. 72 頁熱血標題字典 (不變)
+# 📚 4. 生物講義 26 頁熱血中二標題
 # ==========================================
 page_titles = {
-    1: "【禁忌儀式：科學方法】", 2: "【因果變律：實驗安全】", 3: "【平衡律：測量與天平】", 4: "【煉金基礎：密度奧義】",
-    5: "【煉金呼吸：大氣製備】", 6: "【本質界線：純物與混合】", 7: "【提純程序：過濾蒸發】", 8: "【溶解契約：飽和極限】",
-    9: "【濃度鎖鍊：百分率之理】", 10: "【極限視界：百萬分點】", 11: "【介質低語：波動傳遞】", 12: "【聲速律法：溫度震盪】",
-    13: "【迴聲空間：測距奧義】", 14: "【聽覺統治：樂音要素】", 15: "【感官外視界：超聲應用】", 16: "【虛空直線：光傳定律】",
-    17: "【鏡像世界：反射與虛實】", 18: "【歪曲維度：折射與視深】", 19: "【光之焦點：透鏡奧義】", 20: "【散出虛無：凹透色散】",
-    21: "【視覺修正：眼球構造】", 22: "【穿透熱能：熱傳導】", 23: "【能量流轉：對流輻射】", 24: "【因果天平：比熱計算】",
-    25: "【微觀平衡：原子構造】", 26: "【地圖導覽：元素週期】", 27: "【終極天平：質量莫耳】", 28: "【絕對計數：常數契約】",
-    29: "【變遷權杖：反應速率】", 30: "【因果殺陣：氧化還原】", 31: "【離子覺醒：解離電解】", 32: "【烈焰交鋒：酸鹼試煉】",
-    33: "【色澤密碼：pH指示劑】", 34: "【聖戰餘韻：中和鹽類】", 35: "【結晶真理：日常鹽類】", 36: "【禁斷界線：有機起源】",
-    37: "【奔流結構：烴類性質】", 38: "【香氣連鎖：酯化奧義】", 39: "【長鏈囚籠：聚物塑膠】", 40: "【界面生死：皂化活性】",
-    41: "【平衡結界：力之要素】", 42: "【彈性律法：虎克比例】", 43: "【運動終焉：摩擦力學】", 44: "【重壓深淵：壓力的定義】",
-    45: "【液態威壓：液壓規律】", 46: "【真空挑戰：大氣壓力】", 47: "【排水奧義：浮力秘術】", 48: "【時空座標：位移路徑】",
-    49: "【動態規律：速度速率】", 50: "【加速度覺醒：等加速】", 51: "【第一律法：慣性定律】", 52: "【絕對方程：F=ma】",
-    53: "【宿命反擊：作用反作】", 54: "【圓周輪迴：引力向心】", 55: "【時空軌跡：功與功率】", 56: "【位能幻化：重力能量】",
-    57: "【永恆總量：力能守恆】", 58: "【力矩平衡：槓桿原理】", 59: "【機械魔法：滑輪應用】", 60: "【省力契約：斜面輪軸】",
-    61: "【庫倫禁令：靜電感應】", 62: "【電勢之戰：電流電壓】", 63: "【電阻枷鎖：歐姆定律】", 64: "【瓦特之翼：電功功率】",
-    65: "【焦耳毀滅：家用安全】", 66: "【無形指向：磁場磁極】", 67: "【靈魂契約：鋅銅電池】", 68: "【強制異變：電鍍祕術】",
-    69: "【磁魂覺醒：右手定則】", 70: "【勞倫茲怒：開掌定則】", 71: "【旋轉輪迴：直流電動機】", 72: "【發電機覺醒：冷次定律】"
+    1: "【視覺的覺醒——顯微鏡的物理法則】", 2: "【影像的禁忌與雙重存在——複式 vs 解剖】", 
+    3: "【生命的架構師——動植物細胞的對稱與偏執】", 4: "【絕對領域的海關——細胞膜與滲透律法】", 
+    5: "【生命的鍊金術——酵素的專一與禁忌】", 6: "【靈魂的煉金爐——消化道的長征】",
+    7: "【消失的鍊金配方——透明液體的真偽】", 8: "素養探究：【失落的太陽碎片——光合作用變因破解(上)】", 
+    9: "素養探究：【失落的太陽碎片——光合作用變因破解(下)】", 10: "【生命之脈——維管束的昇華與循環】", 
+    11: "【生命之流的律法——血管動力與物質交換】", 12: "【生命的隱形絲線——內分泌與激素的律法】",
+    13: "【靈魂的傳導律法——神經網路與反射弧】", 14: "【沈默的位移——植物的向性律法】", 
+    15: "【生命的複寫律法——細胞分裂與減數分裂】", 16: "【血緣的排列組合——ABO 血型律法】", 
+    17: "【性別的遺傳烙印——性聯遺傳律法】", 18: "【家族的真相——譜系判讀律法】",
+    19: "【萬物的真名——二名法與分類階層】", 20: "【微觀的混亂——五界分類律法（上）】", 
+    21: "【綠色的聖域——植物界的二分律法】", 22: "【無脊骨的禁軍——無脊椎動物】", 
+    23: "【龍骨的傳承——脊椎動物】", 24: "【因果的交織網路——直視生物圈底層的生存規律】",
+    25: "【吞噬命運的連鎖——階級頂端的毒素聖餐】", 26: "【萬物的繁星——在崩解邊緣編織的多樣性之網】"
 }
 
 if 'audio_html' not in st.session_state: st.session_state.audio_html = None
@@ -142,33 +144,35 @@ if 'qa_audio_html' not in st.session_state: st.session_state.qa_audio_html = Non
 # ==========================================
 # 🔑 5. UI 與 API 驗證
 # ==========================================
-st.title("🚀 理化 AI 雞排珍奶實驗室 (曉臻助教版)")
+st.title("🔬 生物 AI 生命真理研究室 (助教版)")
 st.markdown("""
 <div class="guide-box">
     <b>📖 學生快速通行指南：</b><br>
-    1. 前往 <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>。<br>
-    2. 點擊 <b>Create API key</b> 產出專屬通行證。<br>
-    3. 貼回下方「通行證」欄位按 Enter 啟動反應爐。
+    1. 點擊連結：<a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a> 並登入。<br>
+    2. 點擊左側 <b>Create API key</b>。<br>
+    3. <b>⚠️ 重點：務必勾選兩次同意條款</b>，然後按產生。<br>
+    4. 複製那一串英文金鑰，貼回下方「通行證」欄位按 Enter 即可啟動助教。
 </div>
 """, unsafe_allow_html=True)
+
 user_key = st.text_input("🔑 通行證輸入區：", type="password")
 st.divider()
 
 # ==========================================
-# 💬 6. 學生問答區 (同樣套用雙軌與熱身風格)
+# 💬 6. 學生問答區
 # ==========================================
-st.subheader("💬 學生問問題區")
-student_q = st.text_input("打字問曉臻：", placeholder="例如：1ppm 是什麼意思？")
-uploaded_file = st.file_uploader("📸 照片區：", type=["jpg", "png", "jpeg"])
+st.subheader("💬 生命真理提問區")
+col_q, col_up = st.columns([1, 1])
+with col_q: student_q = st.text_input("打字問助教：", placeholder="例如：酵素的成份是什麼？")
+with col_up: uploaded_file = st.file_uploader("拍照或截圖：", type=["jpg", "png", "jpeg"])
 
 if (student_q or uploaded_file) and user_key:
-    with st.spinner("曉臻正在分析問題..."):
+    with st.spinner("正在調製波霸奶茶並思考答案..."):
         try:
             genai.configure(api_key=user_key)
             model = genai.GenerativeModel('models/gemini-2.5-flash')
             
-            # 問答區專用 Prompt
-            prompt_qa = f"""{PROMPT_TEMPLATE}
+            prompt_qa = f"""{SYSTEM_PROMPT_TEMPLATE}
             
             這是學生的提問內容，請依照上述【四段式產出】與【雙軌協議】為他解答：
             學生的問題：{student_q}
@@ -182,39 +186,47 @@ if (student_q or uploaded_file) and user_key:
             display_qa = full_qa.split("【聽覺劇本】")[0].replace("【視覺內容】", "").strip()
             voice_qa = full_qa.split("【聽覺劇本】")[-1].strip() if "【聽覺劇本】" in full_qa else display_qa
             
-            st.info(f"💡 曉臻解答：\n\n{display_qa}")
+            st.info(f"💡 助教解答：\n\n{display_qa}")
             st.session_state.qa_audio_html = asyncio.run(generate_voice_base64(voice_qa))
         except Exception as e: st.error(f"思考失敗：{e}")
 
 if st.session_state.qa_audio_html:
     st.markdown(st.session_state.qa_audio_html, unsafe_allow_html=True)
+
 st.divider()
 
 # ==========================================
 # 📖 7. 課程選單與導讀啟動
 # ==========================================
-st.subheader("📖 啟動導讀：選擇單元")
-parts_list = ["【第一門：物質初探】", "【二：能量流轉】", "【三：微觀審判】", "【四：力學秘術】", "【五：旋轉輪迴】"]
-part_choice = st.selectbox("大章節", parts_list)
-r = range(1, 16) if "一" in part_choice else range(16, 27) if "二" in part_choice else range(27, 41) if "三" in part_choice else range(41, 55) if "四" in part_choice else range(55, 73)
-options = [f"第 {p} 頁：{page_titles.get(p, '單元')} " for p in r]
-selected_page_str = st.selectbox("精確單元名稱", options)
+st.subheader("📖 翻開真理之書：選擇學習單元")
+parts_list = ["【第一門：微觀與鍊金】", "【二：循環與訊息】", "【三：遺傳與複寫】", "【四：分類與生態】"]
+part_choice = st.selectbox("第一步：選擇大章節", parts_list)
+
+if "第一門" in part_choice: r = range(1, 8)
+elif "二" in part_choice: r = range(8, 15)
+elif "三" in part_choice: r = range(15, 19)
+else: r = range(19, 27)
+
+options = [f"第 {p} 頁：{page_titles.get(p, '單元內容')}" for p in r]
+selected_page_str = st.selectbox("第二步：選擇精確單元名稱", options)
 target_page = int(re.search(r"第 (\d+) 頁", selected_page_str).group(1))
 
-if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
-    if not user_key: st.warning("請先輸入金鑰。")
+if st.button(f"🚀 啟動【第 {target_page} 頁】圖文導讀"):
+    if not user_key:
+        st.warning("請先輸入金鑰。")
     else:
         genai.configure(api_key=user_key)
-        path_finals = os.path.join(os.getcwd(), "data", "Ph_Ch_finals.pdf")
-        with st.spinner("曉臻正在備課調製珍奶..."):
+        path_finals = os.path.join(os.getcwd(), "data", "Biologyforfinals.pdf")
+        with st.spinner("正在調製波霸奶茶..."):
             try:
                 page_img = get_pdf_page_image(path_finals, target_page - 1)
-                st.image(page_img, use_column_width=True)
+                st.image(page_img, caption=f"講義：{page_titles[target_page]}", use_column_width=True)
+                
                 file_obj = genai.upload_file(path=path_finals)
                 model = genai.GenerativeModel('models/gemini-2.5-flash')
                 
-                # 直接注入剛剛寫好的核心 PROMPT_TEMPLATE
-                final_prompt = PROMPT_TEMPLATE.format(target_page=target_page)
+                # 注入目標頁碼與核心 Prompt
+                final_prompt = SYSTEM_PROMPT_TEMPLATE.format(target_page=target_page)
                 
                 res = model.generate_content([file_obj, final_prompt])
                 full_lecture = res.text
@@ -226,9 +238,12 @@ if st.button(f"🚀 啟動【第 {target_page} 頁】真理導讀"):
                 st.markdown(display_lecture)
                 st.session_state.audio_html = asyncio.run(generate_voice_base64(voice_lecture))
                 st.balloons()
-            except Exception as e: st.error(f"異常：{e}")
+            except Exception as e: st.error(f"導讀失敗：{e}")
 
+# ==========================================
+# 🔊 8. 音訊播放區
+# ==========================================
 if st.session_state.audio_html:
     st.markdown("---")
-    st.info("🔊 **曉臻正在口播真理...**")
+    st.info("🔊 **平板/手機提醒**：請點擊播放鈕聽助教導讀。")
     st.markdown(st.session_state.audio_html, unsafe_allow_html=True)
